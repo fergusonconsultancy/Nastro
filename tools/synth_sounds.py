@@ -118,16 +118,41 @@ def door_open():
 # --- Cassette seating and the door shut: the shell slides on its guides, drops onto the spindles,
 #     the door closes with a heavy thunk and the catch latches.
 def seat():
-    b = np.zeros(int(0.42 * SR))
-    slide = band(rng.standard_normal(int(0.1 * SR)), 1800, 6000) * np.linspace(0.2, 1, int(0.1 * SR)) ** 2
-    place(b, slide, 0.0, 0.12)
-    place(b, modes(0.05, [1700, 2600, 3900], [10, 7, 5], [1, .6, .3]), 0.095, 0.35)   # shell on spindles
-    thud = lp(rng.standard_normal(int(0.05 * SR)) * np.exp(-np.arange(int(0.05 * SR)) / (0.008 * SR)), 900)
-    place(b, thud, 0.16, 0.5)
-    place(b, lp(modes(0.18, [104, 236, 515, 980], [45, 28, 16, 9], [1, .65, .4, .2], burst_ms=4), 2000), 0.16, 1.0)  # door
-    place(b, modes(0.04, [3400, 5100, 2400], [6, 4, 8], [.7, .4, .3]), 0.19, 0.5)   # catch
-    place(b, modes(0.03, [2900, 4200], [4, 3], [.5, .3]), 0.235, 0.12)              # rattle
+    """The traditional cassette sound: hollow plastic, not a drum. The shell drops into the holder
+    with a hollow tap and its loose reels rattle; the door shuts with a sharp plastic clack and a
+    small body knock; the catch clicks twice; the reels settle."""
+    b = np.zeros(int(0.36 * SR))
+    hollow = [880, 1430, 2250, 3350, 4700]                # a plastic box: mid resonances, short
+    # the shell drops into the holder
+    place(b, modes(0.05, hollow, [16, 12, 9, 6, 4], [1, .8, .55, .35, .2], burst_ms=0.6), 0.0, 0.55)
+    # its reels shift inside it: a scatter of tiny high clicks
+    for at, g in [(0.012, .32), (0.026, .22), (0.041, .18), (0.058, .12), (0.077, .08)]:
+        place(b, modes(0.015, [3600 + rng.uniform(-500, 900), 5800 + rng.uniform(-600, 600)], [3, 2], [1, .5], burst_ms=0.3), at, g)
+    # the door swinging shut: a brief brush of plastic
+    swish = band(rng.standard_normal(int(0.05 * SR)), 2500, 7000) * np.hanning(int(0.05 * SR))
+    place(b, swish, 0.13, 0.05)
+    # the door shuts: a sharp plastic clack, mostly mid, with only a small knock of the body under it
+    place(b, modes(0.08, [620, 1050, 1720, 2600, 3900], [24, 18, 12, 8, 5], [1, .85, .6, .4, .25], burst_ms=0.8), 0.18, 1.0)
+    place(b, lp(modes(0.06, [260, 410], [22, 14], [1, .5], burst_ms=2), 1500), 0.181, 0.32)
+    # the catch: two clicks, a few milliseconds apart
+    place(b, modes(0.02, [4200, 6100], [3, 2], [1, .5], burst_ms=0.25), 0.196, 0.42)
+    place(b, modes(0.02, [3800, 5600], [3, 2], [1, .5], burst_ms=0.25), 0.209, 0.3)
+    # the reels settle after the jolt
+    for at, g in [(0.232, .14), (0.255, .09), (0.29, .05)]:
+        place(b, modes(0.012, [4400 + rng.uniform(-700, 700)], [2.5], [1], burst_ms=0.25), at, g)
     return finish(b)
+
+
+# --- The door shutting with a tape already in: no drop, just the clack, the catch and the reels settling.
+def door_shut():
+    b = np.zeros(int(0.2 * SR))
+    place(b, modes(0.08, [620, 1050, 1720, 2600, 3900], [24, 18, 12, 8, 5], [1, .85, .6, .4, .25], burst_ms=0.8), 0.0, 1.0)
+    place(b, lp(modes(0.06, [260, 410], [22, 14], [1, .5], burst_ms=2), 1500), 0.001, 0.32)
+    place(b, modes(0.02, [4200, 6100], [3, 2], [1, .5], burst_ms=0.25), 0.016, 0.42)
+    place(b, modes(0.02, [3800, 5600], [3, 2], [1, .5], burst_ms=0.25), 0.029, 0.3)
+    for at, g in [(0.052, .12), (0.08, .07)]:
+        place(b, modes(0.012, [4400 + rng.uniform(-700, 700)], [2.5], [1], burst_ms=0.25), at, g)
+    return finish(b, 0.85)
 
 
 # --- Turning the tape over: plastic lifted, flipped, set down.
@@ -171,6 +196,6 @@ def hiss_loop():
 
 if __name__ == "__main__":
     for name, fn in [("key_play", play), ("key_stop", stop), ("key_wind", wind_key), ("door_open", door_open),
-                     ("tape_seat", seat), ("tape_flip", flip), ("wind_loop", wind_loop), ("hiss_loop", hiss_loop)]:
+                     ("tape_seat", seat), ("door_shut", door_shut), ("tape_flip", flip), ("wind_loop", wind_loop), ("hiss_loop", hiss_loop)]:
         save(name, fn())
         print("wrote", name)

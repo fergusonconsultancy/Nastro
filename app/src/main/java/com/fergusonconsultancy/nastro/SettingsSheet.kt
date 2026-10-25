@@ -76,7 +76,7 @@ class SettingsSheet(ctx: Context, private val shelfChanged: () -> Unit) : FrameL
         panel.addView(head)
         panel.addView(text("settings", 21f, MUTED, hand).apply { setPadding(0, dp(4), 0, dp(12)) })
 
-        row("Finish", "Visconti, the Alfa green. Light blue and grey were the WM-EX610's own.", finishRow())
+        row("Finish", "Brushed Visconti, the Alfa green. Light blue and grey were the WM-EX610's own.", finishRow())
         row("Mechanism sounds", "Keys, door, tape seating, the motor winding.", choice(listOf("On" to true, "Off" to false), { Prefs.sounds }) { Prefs.sounds = it })
         row("Tape hiss", "A faint ferric hiss under the music.", choice(listOf("Off" to false, "Subtle" to true), { Prefs.hiss }) { Prefs.hiss = it })
         row("Fast wind", "Real is 30 times play speed, as on the machine.", choice(listOf("Real" to 30, "Quick" to 60), { Prefs.windX }) { Prefs.windX = it })
@@ -158,7 +158,7 @@ class SettingsSheet(ctx: Context, private val shelfChanged: () -> Unit) : FrameL
     }
 
     fun hide() {
-        Sfx.play(Sfx.S.SEAT, 0.4f)
+        Sfx.play(Sfx.S.DOOR_SHUT, 0.4f)
         scroll.animate().translationY(scroll.height.toFloat()).setDuration(240).setInterpolator(ease).start()
         animate().alpha(0f).setDuration(240).withEndAction { visibility = View.GONE }.start()
     }

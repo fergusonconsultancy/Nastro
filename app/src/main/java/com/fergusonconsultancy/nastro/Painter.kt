@@ -430,18 +430,20 @@ class Painter(ctx: Context) {
 
     /**
      * Visconti is the default: Alfa Romeo's green as the Fold apps use it (an approximation; Alfa
-     * publishes no value), as clear-coated lacquer with champagne engraving and keys. Light blue and
-     * grey were the WM-EX610's own; graphite and rosso are ours.
+     * publishes no value), as brushed anodised metal with champagne engraving, keys and coachline.
+     * Light blue and grey were the WM-EX610's own; graphite and rosso are ours.
+     * [aniso]: the brushing stretches the highlight into a streak across the grooves.
      */
     class Finish(val stops: IntArray, val lid: IntArray, val key: IntArray, val ink: Int, val deep: Int, val chan: Int,
                  val etchLight: Boolean = false, val sym: Int = 0xB81E242C.toInt(), val lacquer: Boolean = false,
-                 val inside: IntArray = intArrayOf(0xFF45586C.toInt(), 0xFF2F3D4C.toInt()))
+                 val inside: IntArray = intArrayOf(0xFF45586C.toInt(), 0xFF2F3D4C.toInt()),
+                 val aniso: Boolean = false, val coach: Boolean = false)
 
     private fun col(v: Number) = v.toInt()
     val finishes = linkedMapOf(
-        "visconti" to Finish(intArrayOf(col(0xFF0B6A39), col(0xFF033A21), col(0xFF000805)), intArrayOf(col(0xFF0D723E), col(0xFF033D22)),
-            intArrayOf(col(0xFFF1E6CD), col(0xFFB49A6A)), col(0xEBD9BB86), col(0x8C000000), col(0xFF03150D), true, col(0xD9463216), true,
-            intArrayOf(col(0xFF123A28), col(0xFF06180F))),
+        "visconti" to Finish(intArrayOf(col(0xFF0D6A3C), col(0xFF043F25), col(0xFF01120A)), intArrayOf(col(0xFF0F7543), col(0xFF054528)),
+            intArrayOf(col(0xFFF1E6CD), col(0xFFB49A6A)), col(0xEBD9BB86), col(0x8C000000), col(0xFF03150D), true, col(0xD9463216), false,
+            intArrayOf(col(0xFF123A28), col(0xFF06180F)), aniso = true, coach = true),
         "blue" to Finish(intArrayOf(col(0xFFBFD4E8), col(0xFF9FBAD4), col(0xFF7593B3)), intArrayOf(col(0xFFC8DBED), col(0xFFA5BFD8)),
             intArrayOf(col(0xFFD9DDE2), col(0xFF8E959D)), col(0xC7FFFFFF), col(0x7316283E), col(0xFF5B6F84)),
         "grey" to Finish(intArrayOf(col(0xFFE2E5E9), col(0xFFC2C7CD), col(0xFF979EA6)), intArrayOf(col(0xFFE9ECEF), col(0xFFC9CED4)),
@@ -471,7 +473,7 @@ class Painter(ctx: Context) {
     }
 
     /** Brushed anodised metal: horizontal on the body, vertical on the lid so it reads as its own panel. */
-    private fun metal(c: Canvas, R: RectF, rad: Float, stops: IntArray, vertical: Boolean, lacquer: Boolean = false) {
+    private fun metal(c: Canvas, R: RectF, rad: Float, stops: IntArray, vertical: Boolean, lacquer: Boolean = false, aniso: Boolean = false) {
         if (lacquer) {
             // clear-coated lacquer: deep colour darkening towards the edges, and one broad reflection
             p.shader = RadialGradient(R.left + R.width() * 0.35f, R.top + R.height() * 0.3f, max(R.width(), R.height()) * 0.85f, stops, floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP)
@@ -485,10 +487,18 @@ class Painter(ctx: Context) {
         c.drawRoundRect(R, rad, rad, p); p.shader = null
         c.save(); path.reset(); path.addRoundRect(R, rad, rad, Path.Direction.CW); c.clipPath(path)
         val bm = brush(max(R.width(), R.height()).toInt() + 2)
-        p.alpha = 190
-        if (vertical) { c.translate(R.right, R.top); c.rotate(90f); c.drawBitmap(bm, Rect(0, 0, R.height().toInt() + 1, R.width().toInt() + 1), RectF(0f, 0f, R.height(), R.width()), p) }
+        p.alpha = if (aniso) 242 else 190
+        if (vertical) { c.save(); c.translate(R.right, R.top); c.rotate(90f); c.drawBitmap(bm, Rect(0, 0, R.height().toInt() + 1, R.width().toInt() + 1), RectF(0f, 0f, R.height(), R.width()), p); c.restore() }
         else c.drawBitmap(bm, Rect(0, 0, R.width().toInt() + 1, R.height().toInt() + 1), R, p)
         p.alpha = 255
+        if (aniso) {
+            // brushed metal stretches its highlight into a soft streak across the grooves
+            val streak = intArrayOf(0x00E6FFF0, 0x00E6FFF0, 0x33E6FFF0, 0x00E6FFF0, 0x00E6FFF0)
+            val stops = floatArrayOf(0f, 0.2f, 0.3f, 0.4f, 1f)
+            p.shader = if (vertical) LinearGradient(0f, R.top, 0f, R.bottom, streak, stops, Shader.TileMode.CLAMP)
+            else LinearGradient(R.left, 0f, R.right, 0f, streak, stops, Shader.TileMode.CLAMP)
+            c.drawRect(R, p); p.shader = null
+        }
         c.restore()
     }
 
@@ -773,9 +783,9 @@ class Painter(ctx: Context) {
         val R = G.radius; val w = G.w
         fill(F.stops[2]); p.setShadowLayer(dp(24f), 0f, dp(10f), 0x99000000.toInt()); c.drawRoundRect(body, R, R, p); p.clearShadowLayer()
         G.wheel?.let { wheel(c, it, live.volume) }
-        metal(c, body, R, F.stops, false, F.lacquer)
-        if (!F.lacquer) {
-            // one highlight over the shoulder (lacquer has its clear-coat reflection instead)
+        metal(c, body, R, F.stops, false, F.lacquer, F.aniso)
+        if (!F.lacquer && !F.aniso) {
+            // one highlight over the shoulder (lacquer and anisotropic brushing carry their own)
             c.save(); path.reset(); path.addRoundRect(body, R, R, Path.Direction.CW); c.clipPath(path)
             p.shader = RadialGradient(body.left + w * 0.18f, body.top + G.h * 0.02f, w * 1.1f, Color.WHITE.a(0.32f), 0, Shader.TileMode.CLAMP)
             c.drawRect(body, p); p.shader = null
@@ -790,8 +800,8 @@ class Painter(ctx: Context) {
         val Ld = G.lid ?: return
         val lr = w * 0.07f
         fill(F.lid[1]); p.setShadowLayer(dp(3f), 0f, dp(1f), 0x47000000); c.drawRoundRect(Ld, lr, lr, p); p.clearShadowLayer()
-        metal(c, Ld, lr, intArrayOf(F.lid[0], F.lid[1], if (F.lacquer) F.stops[2] else F.stops[1]), true, F.lacquer)
-        if (!F.lacquer) {
+        metal(c, Ld, lr, intArrayOf(F.lid[0], F.lid[1], if (F.lacquer || F.aniso) F.stops[2] else F.stops[1]), true, F.lacquer, F.aniso)
+        if (!F.lacquer && !F.aniso) {
             c.save(); path.reset(); path.addRoundRect(Ld, lr, lr, Path.Direction.CW); c.clipPath(path)
             p.shader = RadialGradient(Ld.left + Ld.width() * 0.4f, Ld.top + Ld.height() * 0.32f, Ld.height() * 0.85f,
                 intArrayOf(Color.WHITE.a(0.22f), 0, Color.BLACK.a(0.14f)), floatArrayOf(0f, 0.6f, 1f), Shader.TileMode.CLAMP)
@@ -800,7 +810,7 @@ class Painter(ctx: Context) {
         }
         s.strokeWidth = dp(1f); s.color = Color.BLACK.a(0.42f); r.set(Ld.left - dp(0.5f), Ld.top - dp(0.5f), Ld.right + dp(0.5f), Ld.bottom + dp(0.5f)); c.drawRoundRect(r, lr, lr, s)
         // the seam's lit edge; on lacquer, a champagne coachline
-        s.strokeWidth = dp(0.6f); s.color = if (F.lacquer) 0x8CD9BB86.toInt() else Color.WHITE.a(0.5f); r.set(Ld.left + dp(0.4f), Ld.top + dp(0.4f), Ld.right - dp(0.4f), Ld.bottom - dp(0.4f)); c.drawRoundRect(r, lr, lr, s)
+        s.strokeWidth = dp(0.6f); s.color = if (F.coach) 0x8CD9BB86.toInt() else Color.WHITE.a(0.5f); r.set(Ld.left + dp(0.4f), Ld.top + dp(0.4f), Ld.right - dp(0.4f), Ld.bottom - dp(0.4f)); c.drawRoundRect(r, lr, lr, s)
 
         lens(c, G, detail, live.lifting)
 
@@ -898,7 +908,7 @@ class Painter(ctx: Context) {
         val body = RectF(G.x, G.y, G.x + G.w, G.y + G.h)
         val R = G.radius
         fill(F.stops[2]); p.setShadowLayer(dp(20f), 0f, dp(9f), 0x99000000.toInt()); c.drawRoundRect(body, R, R, p); p.clearShadowLayer()
-        metal(c, body, R, F.stops, false, F.lacquer)
+        metal(c, body, R, F.stops, false, F.lacquer, F.aniso)
         bevel(c, body, R)
         lcd(c, G.lcd, detail, live)
         val C = G.comp ?: return

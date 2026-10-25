@@ -8,11 +8,12 @@ import kotlin.random.Random
 
 /**
  * The mechanism's sounds, synthesised from its parts (tools/synth_sounds.py): the key's
- * ka-chunk, the stop's clack, the door's spring, the tape seating, the motor's whirr while it
- * winds, and an optional bed of tape hiss.
+ * ka-chunk, the stop's clack, the door's spring, the tape seating (hollow plastic: the shell's tap
+ * and its reels' rattle, the door's clack, the double catch), the door shutting on its own, the
+ * motor's whirr while it winds, and an optional bed of tape hiss.
  */
 object Sfx {
-    enum class S { PLAY, STOP, WIND_KEY, DOOR_OPEN, SEAT, FLIP }
+    enum class S { PLAY, STOP, WIND_KEY, DOOR_OPEN, SEAT, DOOR_SHUT, FLIP }
 
     private var pool: SoundPool? = null
     private val ids = HashMap<S, Int>()
@@ -32,6 +33,7 @@ object Sfx {
         ids[S.WIND_KEY] = p.load(c, R.raw.key_wind, 1)
         ids[S.DOOR_OPEN] = p.load(c, R.raw.door_open, 1)
         ids[S.SEAT] = p.load(c, R.raw.tape_seat, 1)
+        ids[S.DOOR_SHUT] = p.load(c, R.raw.door_shut, 1)
         ids[S.FLIP] = p.load(c, R.raw.tape_flip, 1)
         windId = p.load(c, R.raw.wind_loop, 1)
         hissId = p.load(c, R.raw.hiss_loop, 1)

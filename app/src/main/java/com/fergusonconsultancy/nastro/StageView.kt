@@ -115,7 +115,7 @@ class StageView(ctx: Context) : View(ctx) {
         } else if (!nowOpen && open) {
             // Folding: the door has shut; the face appears with the clunk of the catch
             swing = 1f; view = 0f; viewTarget = 0f
-            post { Sfx.play(Sfx.S.SEAT, 0.7f); clunk() }
+            post { Sfx.play(Sfx.S.DOOR_SHUT, 0.8f); clunk() }
         }
         open = nowOpen
         layoutAll()

@@ -83,6 +83,10 @@ Mechack's verdict on the folded screen: it looked low effort, and the app was "n
 Mechack: the light blue, though his own Walkman's colour, lacked sleekness; apply Visconti green and make it slick.
 
 - **Visconti is the default finish**, using the green the Fold apps already use (an approximation of Alfa Romeo's Verde Visconti; Alfa publishes no value), so the portfolio stays one family.
-- **Lacquer, not brushed metal.** Visconti is paint, so this finish is clear-coated: deep colour near black-green at the edges, no brush lines, and one broad clear-coat reflection crossing body and lid as one light would (the mandate's rule: one highlight at a time). The brushed shoulder highlight is dropped on lacquer so there is never a second one.
+- **Brushed, not lacquered** (Mechack, 25 Oct; a clear-coat lacquer version came first and was replaced). The green is anodised metal brushed like the rest of the player: the body horizontally and the lid vertically, so the lid reads as its own panel. Brushed metal stretches its highlight into a soft streak across the grooves, a vertical streak on the body and a horizontal one on the lid, and that streak is the one highlight; the round shoulder highlight used on the other finishes is dropped.
 - **Champagne** (the mandate's #D9BB86) for the engraving, the keys' satin aluminium, the Hold slide and a fine coachline round the lid's seam, as on an Alfa.
 - The inside of the door turns dark green to match. Light blue, grey, graphite and rosso remain in settings.
+
+## Sounds, 25 Oct: the traditional cassette sound
+
+Mechack: placing the cassette did not sound like the traditional cassette sound. The first version was built round a low 104 Hz thump, which reads as a drum. A cassette is a hollow plastic box with two loose reels, so it was rebuilt from that: the shell drops into the holder with a hollow tap (resonances 0.9 to 4.7 kHz), its reels shift and rattle, the door shuts with a sharp plastic clack and only a small body knock (260 and 410 Hz), the catch clicks twice, and the reels settle. About 90% of its energy now sits between 500 Hz and 4 kHz; 6% lies below 300 Hz. Folding the phone and closing the settings now play a door-shut-only sound, since no tape is being placed.
