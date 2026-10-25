@@ -107,7 +107,7 @@ class PlayerGeom private constructor(val kind: Kind, val x: Float, val w: Float)
         fun keyRow(chan: RectF): List<KeyR> {
             val scale = floatArrayOf(1f, 1.22f, 1f, 1f)
             val order = listOf(Deck.Key.REW, Deck.Key.PLAY, Deck.Key.STOP, Deck.Key.FF)
-            val d = minOf(chan.height() * 0.86f, chan.width() / 5.3f)
+            val d = minOf(chan.height() * 0.8f, chan.width() / 5.7f)
             val gap = (chan.width() - scale.sum() * d) / 5
             var kx = chan.left + gap
             val cy = chan.centerY()
@@ -661,14 +661,17 @@ class Painter(ctx: Context) {
         for (K in G.keys) {
             val d = max(if (latched(K.key)) 0.55f else 0f, if (live.pressed == K.key) max(0f, 1 - live.pressAge / 170f) else 0f)
             val cx = K.cx; val cy = K.cy; val R = K.r
-            val wellR = if (K.key == Deck.Key.PLAY) R * 1.34f else R * 1.1f
-            p.shader = LinearGradient(0f, cy - R, 0f, cy + R, Color.BLACK.a(0.45f), Color.WHITE.a(0.25f), Shader.TileMode.CLAMP)
+            // Sunk into the body, as on the WM-EX610: a deep round hole whose upper lip is in shadow
+            // and whose lower lip catches the light; the wall falls away dark above and lit below.
+            val wellR = if (K.key == Deck.Key.PLAY) R * 1.36f else R * 1.16f
+            p.shader = LinearGradient(0f, cy - wellR, 0f, cy + wellR, intArrayOf(Color.BLACK.a(0.35f), 0, Color.WHITE.a(0.55f)), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
+            c.drawCircle(cx, cy, wellR + dp(1f), p)
+            p.shader = LinearGradient(0f, cy - wellR, 0f, cy + wellR, intArrayOf(darken(F.chan, 0.55f), darken(F.chan, 0.2f), lighten(F.chan, 0.15f)), floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP)
             c.drawCircle(cx, cy, wellR, p); p.shader = null
-            fill(F.chan); c.drawCircle(cx, cy, wellR * 0.95f, p)
-            if (K.key == Deck.Key.PLAY) beads(c, cx, cy, R * 1.17f)
-            c.save(); c.translate(cx, cy + d * R * 0.06f); val sc = 1 - d * 0.025f; c.scale(sc, sc)
-            // a raised cap throws its shadow down into the well
-            fill(F.key[1]); p.setShadowLayer(R * 0.32f * (1 - d * 0.7f), R * 0.06f * (1 - d), R * 0.16f * (1 - d), 0x99000000.toInt()); c.drawCircle(0f, 0f, R, p); p.clearShadowLayer()
+            if (K.key == Deck.Key.PLAY) beads(c, cx, cy, R * 1.18f)
+            c.save(); c.translate(cx, cy + d * R * 0.05f); val sc = 1 - d * 0.02f; c.scale(sc, sc)
+            // a sunken key throws no shadow outwards: only a tight contact shadow where it meets the floor
+            fill(F.key[1]); p.setShadowLayer(R * 0.08f, 0f, R * 0.03f, 0x8C000000.toInt()); c.drawCircle(0f, 0f, R, p); p.clearShadowLayer()
             // a convex cap: spun aluminium domed like a bead. Light from the upper left gathers in
             // one soft hotspot; the curve falls into shade towards the lower right; a thin rim of
             // light bounces back from the body along the lower edge.
@@ -687,7 +690,10 @@ class Painter(ctx: Context) {
             s.strokeWidth = dp(0.4f); s.color = Color.WHITE.a(0.05f)
             var rr2 = R * 0.12f; while (rr2 < R * 0.9f) { c.drawCircle(0f, 0f, rr2, s); rr2 += R * 0.075f }
             // the hotspot
-            p.shader = RadialGradient(-R * 0.34f, -R * 0.4f, R * 0.42f, Color.WHITE.a(0.75f - d * 0.3f), 0, Shader.TileMode.CLAMP)
+            p.shader = RadialGradient(-R * 0.34f, -R * 0.4f, R * 0.42f, Color.WHITE.a(0.55f - d * 0.25f), 0, Shader.TileMode.CLAMP)
+            c.drawCircle(0f, 0f, R, p); p.shader = null
+            // the hole's upper lip shades the top of the cap
+            p.shader = LinearGradient(0f, -R, 0f, -R * 0.15f, Color.BLACK.a(0.42f), 0, Shader.TileMode.CLAMP)
             c.drawCircle(0f, 0f, R, p); p.shader = null
             // bounce light along the lower rim
             s.strokeWidth = R * 0.06f; s.color = Color.WHITE.a(0.28f); s.strokeCap = Paint.Cap.ROUND
