@@ -56,3 +56,15 @@ Mechack's library made 808 tapes, most of them singles. A shelf you cannot get t
 - **Singles tapes.** An artist's singles (one or two tracks each) share one tape labelled Singles, the way songs were taped off the radio. A lone single keeps its own tape.
 - **The index (Giulietta).** A–Z sits hidden in the door's trim on the hinge side. Touching the edge wakes it; sliding jumps to each letter with a tick, and the letter is written large across the shelf while held. It blends back 1.2 s after release.
 - **Fixes.** The heading scrolls with the tapes instead of sliding under them; the hinge knuckles, which read as scrollbars, became a single moulded groove; the play LED moved into the key strip.
+
+## Second review, 25 Oct: two states, two identities
+
+Mechack's verdict on the folded screen: it looked low effort, and the app was "neither here nor there". Folded showed a tape through a window, unfolded showed the same tape in a compartment. He offered two directions: make the whole app a cassette, or make the face a real player and save the tape for the unfolded screen.
+
+**Chosen: the player outside, the tape inside.** A cassette alone has no controls, so play keys on a tape would be ornament no force put there, and the fold-as-door idea would be lost.
+
+- **Folded: the player.** A lid brushed the other way from the body, with a seam; a slim chrome-ringed lens showing only the two hubs turning; a recessed reflective readout with the title as a marquee; four keys in a recessed channel moving as one membrane (the pressed key sinks, its neighbours tilt towards it); a knurled volume wheel standing proud of the right edge, driving the phone's media volume; a Hold slide that shows orange when locked; an operation lamp; "OPEN" with an arrow to the hinge; a battery door with the settings behind it.
+- **Unfolded: the tape.** The compartment takes all of the right half except a slim readout and the keys.
+- **Finishes.** Light blue and grey (the WM-EX610's own), graphite, rosso. Type etched through the dark finishes shows bright metal, as real etching does.
+- **Sounds.** Synthesised from the mechanism's parts because recordings could not be used (tools/synth_sounds.py): key strike, mechanism drop, latch and pinch roller make the play key's ka-chunk; the door pops on its spring; the tape slides, drops on its spindles and the door shuts with a thunk and a catch; the motor's whirr follows the reels; optional tape hiss. Awaiting Mechack's ear.
+- **Settings** behind the battery door (and on the shelf's heading when unfolded): finish, sounds, hiss, fast wind (real 30× or quick 60×), auto reverse, Mega Bass, Concentrato, door swing, singles tapes, shelf order (artist, album, newest), haptics.
