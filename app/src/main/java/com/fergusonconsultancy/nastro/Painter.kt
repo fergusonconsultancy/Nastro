@@ -667,22 +667,34 @@ class Painter(ctx: Context) {
             fill(F.chan); c.drawCircle(cx, cy, wellR * 0.95f, p)
             if (K.key == Deck.Key.PLAY) beads(c, cx, cy, R * 1.17f)
             c.save(); c.translate(cx, cy + d * R * 0.06f); val sc = 1 - d * 0.025f; c.scale(sc, sc)
-            fill(F.key[1]); p.setShadowLayer(R * 0.25f * (1 - d * 0.7f), 0f, R * 0.1f * (1 - d), 0x8C000000.toInt()); c.drawCircle(0f, 0f, R, p); p.clearShadowLayer()
-            // polished chamfer
-            p.shader = LinearGradient(-R, -R, R, R, intArrayOf(Color.WHITE, F.key[1], darken(F.key[1], 0.35f)), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
+            // a raised cap throws its shadow down into the well
+            fill(F.key[1]); p.setShadowLayer(R * 0.32f * (1 - d * 0.7f), R * 0.06f * (1 - d), R * 0.16f * (1 - d), 0x99000000.toInt()); c.drawCircle(0f, 0f, R, p); p.clearShadowLayer()
+            // a convex cap: spun aluminium domed like a bead. Light from the upper left gathers in
+            // one soft hotspot; the curve falls into shade towards the lower right; a thin rim of
+            // light bounces back from the body along the lower edge.
+            val fr = R
+            val base = if (d > 0.3f) darken(F.key[0], 0.08f) else F.key[0]
+            val low = darken(F.key[1], if (d > 0.3f) 0.3f else 0.2f)
+            p.shader = RadialGradient(-R * 0.32f, -R * 0.38f, R * 1.25f, intArrayOf(lighten(base, 0.35f), base, F.key[1], low),
+                floatArrayOf(0.04f, 0.45f, 0.85f, 1f), Shader.TileMode.CLAMP)
             c.drawCircle(0f, 0f, R, p); p.shader = null
-            // spun face: the lathe leaves a radial sheen, four soft streaks round the centre
-            val fr = R * 0.84f
-            val base = if (d > 0.3f) darken(F.key[0], 0.1f) else F.key[0]
-            val dark = if (d > 0.3f) darken(F.key[1], 0.15f) else F.key[1]
-            val sweep = android.graphics.SweepGradient(0f, 0f, intArrayOf(base, dark, base, dark, base, dark, base, dark, base),
+            // the lathe's sheen, following the dome
+            val sheenHi = Color.WHITE.a(0.14f); val sheenLo = Color.BLACK.a(0.08f)
+            val sweep = android.graphics.SweepGradient(0f, 0f, intArrayOf(sheenHi, sheenLo, sheenHi, sheenLo, sheenHi, sheenLo, sheenHi, sheenLo, sheenHi),
                 floatArrayOf(0f, .125f, .25f, .375f, .5f, .625f, .75f, .875f, 1f))
             sweep.setLocalMatrix(android.graphics.Matrix().apply { setRotate(-45f) })
-            p.shader = sweep; c.drawCircle(0f, 0f, fr, p); p.shader = null
-            s.strokeWidth = dp(0.4f); s.color = Color.WHITE.a(0.07f)
-            var rr2 = fr * 0.15f; while (rr2 < fr) { c.drawCircle(0f, 0f, rr2, s); rr2 += fr * 0.07f }
-            p.shader = RadialGradient(-fr * 0.2f, -fr * 0.25f, fr * 1.2f, Color.WHITE.a(0.18f), Color.BLACK.a(0.12f), Shader.TileMode.CLAMP)
-            c.drawCircle(0f, 0f, fr, p); p.shader = null
+            p.shader = sweep; c.drawCircle(0f, 0f, R * 0.96f, p); p.shader = null
+            s.strokeWidth = dp(0.4f); s.color = Color.WHITE.a(0.05f)
+            var rr2 = R * 0.12f; while (rr2 < R * 0.9f) { c.drawCircle(0f, 0f, rr2, s); rr2 += R * 0.075f }
+            // the hotspot
+            p.shader = RadialGradient(-R * 0.34f, -R * 0.4f, R * 0.42f, Color.WHITE.a(0.75f - d * 0.3f), 0, Shader.TileMode.CLAMP)
+            c.drawCircle(0f, 0f, R, p); p.shader = null
+            // bounce light along the lower rim
+            s.strokeWidth = R * 0.06f; s.color = Color.WHITE.a(0.28f); s.strokeCap = Paint.Cap.ROUND
+            r.set(-R * 0.93f, -R * 0.93f, R * 0.93f, R * 0.93f); c.drawArc(r, 27f, 126f, false, s)
+            s.strokeCap = Paint.Cap.BUTT
+            // the edge where the dome turns away
+            s.strokeWidth = dp(0.6f); s.color = Color.BLACK.a(0.28f); c.drawCircle(0f, 0f, R - dp(0.3f), s)
             // engraved symbol
             val q = fr * 0.34f
             path.reset()
@@ -716,6 +728,12 @@ class Painter(ctx: Context) {
         }
     }
 
+
+    private fun lighten(col: Int, amt: Float): Int {
+        val r0 = (col shr 16) and 255; val g0 = (col shr 8) and 255; val b0 = col and 255
+        fun f(v: Int) = (v + (255 - v) * amt).toInt().coerceIn(0, 255)
+        return (col and 0xFF000000.toInt()) or (f(r0) shl 16) or (f(g0) shl 8) or f(b0)
+    }
 
     private fun darken(col: Int, amt: Float): Int {
         val r0 = (col shr 16) and 255; val g0 = (col shr 8) and 255; val b0 = col and 255
