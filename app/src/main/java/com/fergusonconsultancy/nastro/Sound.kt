@@ -7,10 +7,10 @@ import kotlin.math.abs
 import kotlin.random.Random
 
 /**
- * The mechanism's sounds, synthesised from its parts (tools/synth_sounds.py): the key's
- * ka-chunk, the stop's clack, the door's spring, the tape seating (hollow plastic: the shell's tap
- * and its reels' rattle, the door's clack, the double catch), the door shutting on its own, the
- * motor's whirr while it winds, and an optional bed of tape hiss.
+ * The mechanism's sounds (tools/synth_sounds.py). Generated from noise, shaped to measurements of
+ * a real cassette mechanism: broadband clicks that barely ring (about 15 ms to fall 20 dB) with a
+ * low knock through the body, arriving as a main click and smaller settling clicks; the motor
+ * winding is a high whine near 1,465 Hz over a hum near 312 Hz. Plus an optional bed of tape hiss.
  */
 object Sfx {
     enum class S { PLAY, STOP, WIND_KEY, DOOR_OPEN, SEAT, DOOR_SHUT, FLIP }

@@ -1,52 +1,79 @@
 """
-Mechanism sounds for Nastro, built by modal synthesis: each part (key, latch, spring, roller,
-door, motor) is a few decaying resonances excited by a short noise burst, timed as the real
-mechanism moves. No recordings, so no licences to worry about.
+Nastro's mechanism sounds, second generation (25 Oct 2026).
+
+The first set was modal synthesis: tuned resonances that ring at fixed pitches, which read as
+synthetic. Measured against reference recordings of a real cassette mechanism (42 click onsets),
+a real click is broadband and barely rings:
+
+  - average spectrum (power per Hz, third-octave, dB re peak), which every click here is shaped to
+  - decay to -20 dB: median 15 ms (25th-75th percentile 9-29 ms)
+  - share of energy below 200 Hz: median 38% (the mechanism knocking through the body)
+  - actions arrive as clusters: a main click, then smaller settling clicks
+  - the motor winding is a steady whine near 1,465 Hz with a hum near 312 Hz
+
+Only these statistics are taken from the reference; every sample here is generated from noise.
 """
 import numpy as np
 from scipy.signal import butter, sosfilt
-import wave, sys, os
+import wave, sys, os, json
 
 SR = 44100
-rng = np.random.default_rng(1961)  # the year Philips... no: just a seed
+rng = np.random.default_rng(2001)
 out = sys.argv[1] if len(sys.argv) > 1 else "."
 
-
-def t(sec):
-    return np.arange(int(sec * SR)) / SR
-
-
-def modes(dur, freqs, decays_ms, amps, burst_ms=0.8, jitter=0.01):
-    """A struck object: resonances at freqs, each decaying, excited by a tiny noise burst."""
-    n = int(dur * SR)
-    tt = np.arange(n) / SR
-    y = np.zeros(n)
-    for f, d, a in zip(freqs, decays_ms, amps):
-        f2 = f * (1 + rng.uniform(-jitter, jitter))
-        # plastic damps its high modes hard: the higher the mode, the shorter its ring
-        d2 = d * (0.55 if f2 > 1500 else 1.0)
-        y += a * np.sin(2 * np.pi * f2 * tt + rng.uniform(0, 2 * np.pi)) * np.exp(-tt / (d2 / 1000))
-    b = int(burst_ms / 1000 * SR)
-    burst = rng.standard_normal(b) * np.hanning(b)
-    exc = np.convolve(y, burst, mode="full")[:n] if b > 1 else y
-    # the contact itself: a broadband crack, gone in a few milliseconds
-    nb = int(0.012 * SR)
-    crack = rng.standard_normal(nb) * np.exp(-np.arange(nb) / (0.0018 * SR))
-    exc[:nb] += crack * 0.35 * max(amps)
-    return exc
+# Measured profile: third-octave centres (Hz) and power density (dB re peak)
+CENTRES = [63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150,
+           4000, 5000, 6300, 8000, 10000, 12500, 16000]
+PROFILE = [-1.8, -12.5, -11.6, -6.9, -8.0, -7.6, -5.1, -1.8, 0.0, -6.7, -4.6, -4.0, -7.9, -5.8, -7.1, -8.1,
+           -10.8, -12.8, -12.3, -14.6, -15.5, -16.0, -20.5, -21.3, -28.9]
 
 
-def band(x, lo, hi, order=2):
-    sos = butter(order, [lo, hi], btype="band", fs=SR, output="sos")
-    return sosfilt(sos, x)
+KNOCK_LP = float(os.environ.get("KNOCK_LP", 60))
+KNOCK_T = float(os.environ.get("KNOCK_T", 0.8))
+LOW_SCALE = float(os.environ.get("LOW_SCALE", 0.55))
+DECAY_SCALE = float(os.environ.get("DECAY_SCALE", 1.4))
+BODY_CUT = float(os.environ.get("BODY_CUT", 110))
 
 
-def hp(x, f, order=2):
-    return sosfilt(butter(order, f, btype="high", fs=SR, output="sos"), x)
+def shaped_noise(n, tilt_db_per_oct=0.0, low_cut=None):
+    """White noise filtered to the measured click spectrum, optionally tilted brighter or darker."""
+    nfft = 1 << int(np.ceil(np.log2(max(n, 64))))
+    X = np.fft.rfft(rng.standard_normal(nfft))
+    f = np.fft.rfftfreq(nfft, 1 / SR)
+    lf = np.log2(np.clip(f, 40, 20000))
+    db = np.interp(lf, np.log2(CENTRES), PROFILE, left=PROFILE[0], right=PROFILE[-1] - 10)
+    db = db + tilt_db_per_oct * (lf - np.log2(1000))
+    if low_cut:
+        db = db - 24 * np.clip(np.log2(low_cut / np.clip(f, 1, None)), 0, None)
+    X *= 10 ** (db / 20)
+    return np.fft.irfft(X, nfft)[:n]
 
 
-def lp(x, f, order=2):
-    return sosfilt(butter(order, f, btype="low", fs=SR, output="sos"), x)
+def hp(x, f):
+    return sosfilt(butter(2, f, btype="high", fs=SR, output="sos"), x)
+
+
+def lp(x, f):
+    return sosfilt(butter(2, f, btype="low", fs=SR, output="sos"), x)
+
+
+def click(decay_ms=6.5, low=0.38, tilt=0.0, knock_ms=10.0, length=0.09):
+    """One mechanism click: a broadband burst with the measured timbre, and a knock below 200 Hz.
+    decay_ms is the time constant; 6.5 ms reaches -20 dB at 15 ms, the measured median."""
+    n = int(length * SR)
+    t = np.arange(n) / SR
+    att = np.clip(t / 0.0003, 0, 1)
+    body = hp(shaped_noise(n, tilt, low_cut=BODY_CUT), BODY_CUT * 0.9) * att * np.exp(-t / (decay_ms * DECAY_SCALE / 1000))
+    # the knock sits low (the reference peaks near 63 Hz and dips at 80-100 Hz) and dies quickly
+    knock = lp(lp(rng.standard_normal(n), KNOCK_LP), KNOCK_LP) * att * np.exp(-t / (knock_ms * KNOCK_T / 1000))
+    # set the low share: energy of knock / (knock + body)
+    eb, ek = np.sum(body ** 2), np.sum(knock ** 2)
+    low = low * LOW_SCALE
+    if low > 0 and ek > 0:
+        knock *= np.sqrt(low / (1 - low) * eb / ek)
+    else:
+        knock *= 0
+    return body + knock
 
 
 def place(buf, x, at, gain=1.0):
@@ -55,147 +82,118 @@ def place(buf, x, at, gain=1.0):
     buf[i:end] += x[: end - i] * gain
 
 
-def finish(x, peak=0.9, fade_ms=8):
+def finish(x, peak=0.9, fade_ms=6):
     x = x - np.mean(x)
     f = int(fade_ms / 1000 * SR)
     x[-f:] *= np.linspace(1, 0, f)
-    m = np.max(np.abs(x)) or 1
-    return x / m * peak
+    return x / (np.max(np.abs(x)) or 1) * peak
 
 
 def save(name, x):
-    x = np.clip(x, -1, 1)
     with wave.open(os.path.join(out, name + ".wav"), "wb") as w:
         w.setnchannels(1); w.setsampwidth(2); w.setframerate(SR)
-        w.writeframes((x * 32767).astype("<i2").tobytes())
+        w.writeframes((np.clip(x, -1, 1) * 32767).astype("<i2").tobytes())
 
 
-# --- Play: "ka-chunk". The key's plastic hits bottom, the mechanism drops, the latch catches,
-#     then the pinch roller meets the capstan.
-def play():
-    b = np.zeros(int(0.24 * SR))
-    place(b, modes(0.06, [2350, 3120, 4800, 6900], [12, 9, 6, 3], [1, .7, .4, .15]), 0.0, 0.55)
-    thud = lp(rng.standard_normal(int(0.04 * SR)) * np.exp(-np.arange(int(0.04 * SR)) / (0.006 * SR)), 1200)
-    place(b, thud, 0.007, 0.45)
-    place(b, lp(modes(0.12, [128, 296, 610, 1150], [38, 24, 14, 8], [1, .6, .35, .2], burst_ms=2.5), 2400), 0.007, 1.0)
-    place(b, modes(0.04, [3900, 5600, 2700], [6, 4, 9], [.6, .4, .35]), 0.041, 0.55)
-    place(b, lp(modes(0.08, [92, 210], [32, 14], [1, .4], burst_ms=3), 900), 0.072, 0.35)
-    return finish(b)
+def jit(v, amt=0.15):
+    return v * (1 + rng.uniform(-amt, amt))
 
 
-# --- Stop: the latch lets go and the key springs back up: a drier clack and a faint spring ring.
-def stop():
-    b = np.zeros(int(0.2 * SR))
-    place(b, modes(0.06, [1900, 2800, 4300, 6100], [14, 10, 6, 3], [1, .7, .45, .2]), 0.0, 0.7)
-    place(b, lp(modes(0.1, [176, 420, 860], [32, 18, 10], [1, .55, .3], burst_ms=2), 2600), 0.004, 0.8)
-    place(b, modes(0.06, [5200, 7800], [22, 14], [1, .5], burst_ms=0.3), 0.012, 0.015)
-    return finish(b, 0.8)
-
-
-# --- Fast wind key: like play but lighter, no roller.
-def wind_key():
+# Play: the key goes down with a knock through the body, the latch catches it, the pinch roller meets the capstan.
+def key_play():
     b = np.zeros(int(0.16 * SR))
-    place(b, modes(0.05, [2600, 3500, 5200], [10, 7, 4], [1, .6, .3]), 0.0, 0.6)
-    place(b, lp(modes(0.1, [150, 340, 700], [40, 22, 12], [1, .5, .3], burst_ms=2), 2400), 0.006, 0.8)
-    place(b, modes(0.03, [4300, 6000], [5, 3], [.6, .4]), 0.03, 0.45)
-    return finish(b, 0.85)
-
-
-# --- Door open: the catch releases and the sprung door pops out with a little rattle.
-def door_open():
-    b = np.zeros(int(0.32 * SR))
-    place(b, modes(0.04, [3000, 4500, 6200], [7, 5, 3], [1, .6, .3]), 0.0, 0.6)
-    tt = t(0.2)
-    f = 150 + 30 * (1 - np.exp(-tt / 0.03))
-    boing = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-tt / 0.07)
-    place(b, lp(boing, 1200), 0.006, 0.55)
-    place(b, lp(modes(0.08, [240, 520], [30, 15], [1, .5], burst_ms=2), 2000), 0.01, 0.5)
-    for i, at in enumerate([0.06, 0.088, 0.14]):
-        place(b, modes(0.03, [2200 + 400 * i, 3600], [5, 3], [1, .5]), at, 0.22 / (i + 1))
-    return finish(b, 0.85)
-
-
-# --- Cassette seating and the door shut: the shell slides on its guides, drops onto the spindles,
-#     the door closes with a heavy thunk and the catch latches.
-def seat():
-    """The traditional cassette sound: hollow plastic, not a drum. The shell drops into the holder
-    with a hollow tap and its loose reels rattle; the door shuts with a sharp plastic clack and a
-    small body knock; the catch clicks twice; the reels settle."""
-    b = np.zeros(int(0.36 * SR))
-    hollow = [880, 1430, 2250, 3350, 4700]                # a plastic box: mid resonances, short
-    # the shell drops into the holder
-    place(b, modes(0.05, hollow, [16, 12, 9, 6, 4], [1, .8, .55, .35, .2], burst_ms=0.6), 0.0, 0.55)
-    # its reels shift inside it: a scatter of tiny high clicks
-    for at, g in [(0.012, .32), (0.026, .22), (0.041, .18), (0.058, .12), (0.077, .08)]:
-        place(b, modes(0.015, [3600 + rng.uniform(-500, 900), 5800 + rng.uniform(-600, 600)], [3, 2], [1, .5], burst_ms=0.3), at, g)
-    # the door swinging shut: a brief brush of plastic
-    swish = band(rng.standard_normal(int(0.05 * SR)), 2500, 7000) * np.hanning(int(0.05 * SR))
-    place(b, swish, 0.13, 0.05)
-    # the door shuts: a sharp plastic clack, mostly mid, with only a small knock of the body under it
-    place(b, modes(0.08, [620, 1050, 1720, 2600, 3900], [24, 18, 12, 8, 5], [1, .85, .6, .4, .25], burst_ms=0.8), 0.18, 1.0)
-    place(b, lp(modes(0.06, [260, 410], [22, 14], [1, .5], burst_ms=2), 1500), 0.181, 0.32)
-    # the catch: two clicks, a few milliseconds apart
-    place(b, modes(0.02, [4200, 6100], [3, 2], [1, .5], burst_ms=0.25), 0.196, 0.42)
-    place(b, modes(0.02, [3800, 5600], [3, 2], [1, .5], burst_ms=0.25), 0.209, 0.3)
-    # the reels settle after the jolt
-    for at, g in [(0.232, .14), (0.255, .09), (0.29, .05)]:
-        place(b, modes(0.012, [4400 + rng.uniform(-700, 700)], [2.5], [1], burst_ms=0.25), at, g)
+    place(b, click(6.5, 0.42, 0.0, 11), 0.0, 1.0)
+    place(b, click(3.5, 0.10, 1.5, 5), 0.034, 0.42)
+    place(b, click(4.0, 0.25, -1.0, 8), 0.068, 0.22)
     return finish(b)
 
 
-# --- The door shutting with a tape already in: no drop, just the clack, the catch and the reels settling.
+# Stop: the latch lets go; a drier unlatching click with its knock, and the key springing back.
+def key_stop():
+    b = np.zeros(int(0.14 * SR))
+    place(b, click(8.0, 0.45, 0.5, 12), 0.0, 1.0)
+    place(b, click(3.0, 0.05, 2.0, 4), 0.012, 0.3)
+    place(b, click(3.0, 0.05, 1.0, 4), 0.058, 0.12)
+    return finish(b, 0.85)
+
+
+# Fast wind key: lighter, one catch.
+def key_wind():
+    b = np.zeros(int(0.12 * SR))
+    place(b, click(5.5, 0.30, 0.5, 9), 0.0, 1.0)
+    place(b, click(3.0, 0.08, 1.5, 4), 0.028, 0.35)
+    return finish(b, 0.85)
+
+
+# Door open: the catch releases, the sprung door pops and the tape rattles in its holder.
+def door_open():
+    b = np.zeros(int(0.42 * SR))
+    place(b, click(4.0, 0.15, 1.5, 6), 0.0, 0.7)
+    place(b, click(9.0, 0.40, 0.0, 14), 0.018, 1.0)
+    for at, g in [(0.09, .25), (0.15, .16), (0.24, .1), (0.33, .06)]:
+        place(b, click(jit(3.5), 0.08, jit(1.0, .5), 4), at, g)
+    return finish(b, 0.85)
+
+
+# Tape seating: the shell drops into the holder and its reels rattle; the door shuts with the
+# biggest knock of the set; the catch clicks; the tape settles.
+def tape_seat():
+    b = np.zeros(int(0.5 * SR))
+    place(b, click(5.0, 0.22, 0.5, 8), 0.0, 0.6)
+    for at, g in [(0.022, .22), (0.041, .14), (0.066, .09)]:
+        place(b, click(jit(2.5), 0.05, jit(2.0, .4), 3), at, g)
+    place(b, click(10.0, 0.50, -0.5, 16), 0.2, 1.0)
+    place(b, click(3.5, 0.10, 1.5, 5), 0.222, 0.45)
+    for at, g in [(0.27, .12), (0.34, .07)]:
+        place(b, click(jit(2.5), 0.05, jit(1.5, .4), 3), at, g)
+    return finish(b)
+
+
+# The door shutting with the tape already in.
 def door_shut():
     b = np.zeros(int(0.2 * SR))
-    place(b, modes(0.08, [620, 1050, 1720, 2600, 3900], [24, 18, 12, 8, 5], [1, .85, .6, .4, .25], burst_ms=0.8), 0.0, 1.0)
-    place(b, lp(modes(0.06, [260, 410], [22, 14], [1, .5], burst_ms=2), 1500), 0.001, 0.32)
-    place(b, modes(0.02, [4200, 6100], [3, 2], [1, .5], burst_ms=0.25), 0.016, 0.42)
-    place(b, modes(0.02, [3800, 5600], [3, 2], [1, .5], burst_ms=0.25), 0.029, 0.3)
-    for at, g in [(0.052, .12), (0.08, .07)]:
-        place(b, modes(0.012, [4400 + rng.uniform(-700, 700)], [2.5], [1], burst_ms=0.25), at, g)
+    place(b, click(10.0, 0.50, -0.5, 16), 0.0, 1.0)
+    place(b, click(3.5, 0.10, 1.5, 5), 0.022, 0.45)
+    place(b, click(2.5, 0.05, 1.5, 3), 0.07, 0.1)
     return finish(b, 0.85)
 
 
-# --- Turning the tape over: plastic lifted, flipped, set down.
-def flip():
-    b = np.zeros(int(0.2 * SR))
-    place(b, modes(0.04, [2100, 3300], [8, 5], [1, .5]), 0.0, 0.4)
-    swish = band(rng.standard_normal(int(0.08 * SR)), 900, 3000) * np.hanning(int(0.08 * SR))
-    place(b, swish, 0.02, 0.15)
-    place(b, lp(modes(0.08, [180, 400, 2200], [30, 16, 6], [1, .5, .3], burst_ms=2), 4000), 0.11, 0.7)
+# Turning the tape over: lifted out with a tick, set back down.
+def tape_flip():
+    b = np.zeros(int(0.22 * SR))
+    place(b, click(3.5, 0.10, 1.0, 5), 0.0, 0.5)
+    place(b, click(6.0, 0.35, 0.0, 10), 0.12, 0.9)
+    place(b, click(2.5, 0.05, 1.5, 3), 0.145, 0.2)
     return finish(b, 0.75)
 
 
-# --- Fast wind: the motor's whine with spindle clatter. A seamless one-second loop; the app
-#     changes its rate with the reels' speed.
+# Fast wind: the motor's high whine near 1,465 Hz over a hum near 312 Hz, with the reels' rustle.
+# A seamless one-second loop (whole cycles of every partial); the app changes its rate with speed.
 def wind_loop():
-    dur = 1.0
-    tt = t(dur)
-    f0 = 220.0  # whole cycles per loop: seamless
-    motor = sum(a * np.sin(2 * np.pi * f0 * h * tt + rng.uniform(0, 6.28)) for h, a in [(1, 1), (2, .45), (3, .3), (5, .12), (7, .06)])
-    flutter = 1 + 0.25 * np.sin(2 * np.pi * 12 * tt)   # 12 whole cycles
-    n = rng.standard_normal(len(tt) + 4410)
-    clatter = band(n, 1500, 4500)[4410:]
-    clatter = clatter * (0.6 + 0.4 * np.sin(2 * np.pi * 24 * tt)) ** 2
-    # make the noise loop: crossfade its own tail onto its head
-    x = 0.35 * motor * flutter + 0.9 * clatter / np.std(clatter) * 0.25
-    return finish(x, 0.6, fade_ms=1)
+    t = np.arange(SR) / SR
+    whine = np.sin(2 * np.pi * 1465 * t + 0.6 * np.sin(2 * np.pi * 7 * t)) + 0.35 * np.sin(2 * np.pi * 2930 * t)
+    hum = 0.55 * np.sin(2 * np.pi * 312 * t) + 0.2 * np.sin(2 * np.pi * 624 * t)
+    flutter = 1 + 0.18 * np.sin(2 * np.pi * 11 * t)
+    rustle = shaped_noise(SR + 2048)[1024:1024 + SR]
+    rustle = rustle / np.std(rustle)
+    fade = int(0.03 * SR)
+    rustle[:fade] = rustle[:fade] * np.linspace(0, 1, fade) + rustle[-fade:] * np.linspace(1, 0, fade)
+    x = 0.32 * whine * flutter + 0.3 * hum + 0.25 * rustle
+    return finish(x, 0.6, fade_ms=0.5)
 
 
-# --- Tape hiss: ferric hiss, high and soft, a seamless two-second loop.
 def hiss_loop():
     n = int(2.0 * SR)
-    raw = rng.standard_normal(n + 8820)
-    h = hp(raw, 2500, 2)
-    h = lp(h, 11000, 2)[8820:]
+    h = lp(hp(rng.standard_normal(n + 8820), 2500), 11000)[8820:]
     fade = int(0.05 * SR)
     x = h.copy()
     x[:fade] = h[:fade] * np.linspace(0, 1, fade) + h[-fade:] * np.linspace(1, 0, fade)
-    x = x[: n - fade]
-    return finish(x, 0.5, fade_ms=1)
+    return finish(x[: n - fade], 0.5, fade_ms=0.5)
 
 
 if __name__ == "__main__":
-    for name, fn in [("key_play", play), ("key_stop", stop), ("key_wind", wind_key), ("door_open", door_open),
-                     ("tape_seat", seat), ("door_shut", door_shut), ("tape_flip", flip), ("wind_loop", wind_loop), ("hiss_loop", hiss_loop)]:
+    for name, fn in [("key_play", key_play), ("key_stop", key_stop), ("key_wind", key_wind), ("door_open", door_open),
+                     ("tape_seat", tape_seat), ("door_shut", door_shut), ("tape_flip", tape_flip),
+                     ("wind_loop", wind_loop), ("hiss_loop", hiss_loop)]:
         save(name, fn())
         print("wrote", name)

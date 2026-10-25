@@ -90,3 +90,9 @@ Mechack: the light blue, though his own Walkman's colour, lacked sleekness; appl
 ## Sounds, 25 Oct: the traditional cassette sound
 
 Mechack: placing the cassette did not sound like the traditional cassette sound. The first version was built round a low 104 Hz thump, which reads as a drum. A cassette is a hollow plastic box with two loose reels, so it was rebuilt from that: the shell drops into the holder with a hollow tap (resonances 0.9 to 4.7 kHz), its reels shift and rattle, the door shuts with a sharp plastic clack and only a small body knock (260 and 410 Hz), the catch clicks twice, and the reels settle. About 90% of its energy now sits between 500 Hz and 4 kHz; 6% lies below 300 Hz. Folding the phone and closing the settings now play a door-shut-only sound, since no tape is being placed.
+
+## Sounds, second generation (25 Oct)
+
+Still "way off" (Mechack), and he played reference recordings of a real cassette mechanism (buttons, play, motor off, unlatching, rewind and stop) to show it. The first set used modal synthesis, tuned resonances ringing at fixed pitches, which reads as synthetic. Measured over 42 click onsets in the reference, a real click is broadband and barely rings: its power peaks around 315-400 Hz with a separate knock near 63 Hz and rolls off towards 16 kHz; it falls 20 dB in a median 15 ms; a typical event carries a large share of its energy below 200 Hz; actions come as clusters, a main click then smaller settling clicks; the rewind motor is a high whine near 1,465 Hz over a hum near 312 Hz, not the 220 Hz drone used before.
+
+Every sound was rebuilt from noise shaped to that measured spectrum, with the measured decay and a low knock, in clusters per action, and checked against the reference: decay 15.0 ms against 15.4, spectrum within a few dB per third-octave band. Only statistics were taken from the reference recordings (licensed Soundsnap effects); no audio from them is used.
