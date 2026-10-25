@@ -31,6 +31,8 @@ class Tape(
     /** Whose cover goes on the J-card: the album itself, or the newest single on a singles tape. */
     val artId: Long = albumId,
     val singles: Boolean = false,
+    /** When it arrived on the phone, newest track first: for "newest" shelf order. */
+    var added: Long = 0L,
 ) {
     /** Shelf order and the index letter: artist, ignoring a leading "The". */
     val sortKey: String = artist.lowercase().removePrefix("the ").trim()
@@ -94,6 +96,9 @@ object Library {
     var loaded = false
         private set
 
+    /** Settings that change the shelf (singles, order) rebuild it. */
+    fun reload(ctx: Context, done: (List<Tape>) -> Unit) { loaded = false; load(ctx, done) }
+
     fun load(ctx: Context, done: (List<Tape>) -> Unit) {
         val app = ctx.applicationContext
         io.execute {
@@ -116,7 +121,7 @@ object Library {
         val proj = arrayOf(
             MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.TRACK, MediaStore.Audio.Media.ALBUM_ID, MediaStore.Audio.Media.ALBUM,
-            MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.ALBUM_ARTIST,
+            MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.ALBUM_ARTIST, MediaStore.Audio.Media.DATE_ADDED,
         )
         val byAlbum = LinkedHashMap<Long, MutableList<Array<Any?>>>()
         ctx.contentResolver.query(
@@ -127,7 +132,7 @@ object Library {
             while (c.moveToNext()) {
                 val albumId = c.getLong(4)
                 byAlbum.getOrPut(albumId) { mutableListOf() }.add(
-                    arrayOf(c.getLong(0), c.getString(1) ?: "", c.getLong(2), c.getInt(3), c.getString(5) ?: "", c.getString(6) ?: "", c.getString(7))
+                    arrayOf(c.getLong(0), c.getString(1) ?: "", c.getLong(2), c.getInt(3), c.getString(5) ?: "", c.getString(6) ?: "", c.getString(7), c.getLong(8))
                 )
             }
         }
@@ -140,7 +145,7 @@ object Library {
         for ((albumId, rows) in byAlbum) {
             // TRACK is disc*1000 + track on many files; sorting by it keeps disc order too
             rows.sortWith(compareBy<Array<Any?>> { it[3] as Int }.thenBy { it[1] as String })
-            if (rows.size <= 2) singlesBy.getOrPut(artistOf(rows.first()).lowercase()) { mutableListOf() } += albumId to rows
+            if (Prefs.singles && rows.size <= 2) singlesBy.getOrPut(artistOf(rows.first()).lowercase()) { mutableListOf() } += albumId to rows
         }
         val merged = HashSet<Long>()
         for ((_, group) in singlesBy) {
@@ -148,14 +153,18 @@ object Library {
             val rows = group.flatMap { it.second }
             val artist = artistOf(rows.first())
             val id = -(1L + (artist.lowercase().hashCode().toLong() and 0x7FFFFFFF))
-            Tape.build(id, artist, "Singles", raw(rows), artId = group.maxOf { it.first }, singles = true)?.let { out += it }
+            Tape.build(id, artist, "Singles", raw(rows), artId = group.maxOf { it.first }, singles = true)?.let { it.added = rows.maxOf { r -> r[7] as Long }; out += it }
             group.forEach { merged += it.first }
         }
         for ((albumId, rows) in byAlbum) {
             if (albumId in merged) continue
-            Tape.build(albumId, artistOf(rows.first()), rows.first()[4] as String, raw(rows))?.let { out += it }
+            Tape.build(albumId, artistOf(rows.first()), rows.first()[4] as String, raw(rows))?.let { it.added = rows.maxOf { r -> r[7] as Long }; out += it }
         }
-        out.sortWith(compareBy<Tape> { it.sortKey }.thenBy { it.singles }.thenBy { it.album.lowercase() })
+        when (Prefs.order) {
+            "album" -> out.sortWith(compareBy<Tape> { it.album.lowercase().removePrefix("the ") }.thenBy { it.sortKey })
+            "newest" -> out.sortWith(compareByDescending<Tape> { it.added }.thenBy { it.sortKey })
+            else -> out.sortWith(compareBy<Tape> { it.sortKey }.thenBy { it.singles }.thenBy { it.album.lowercase() })
+        }
         return out
     }
 }

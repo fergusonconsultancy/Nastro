@@ -75,6 +75,8 @@ object Deck {
     fun init(ctx: Context) {
         if (::app.isInitialized) return
         app = ctx.applicationContext
+        Prefs.init(app)
+        Sfx.init(app)
         val p = prefs()
         autoRev = p.getBoolean("autoRev", true)
         megaBass = p.getBoolean("megaBass", false)
@@ -153,6 +155,7 @@ object Deck {
     /** Stop without opening the door (notification, headset, audio focus loss). */
     fun stop() {
         mode = Mode.STOP; amsTarget = null; blank = false
+        Sfx.update(0.0, false)
         save(); wake(); notifyChanged()
     }
 
@@ -224,6 +227,16 @@ object Deck {
         p.edit().putLong("tape", t.albumId).apply()
     }
 
+    /** The shelf was rebuilt (a setting changed): keep the same tape in the deck, where it is. */
+    fun relink() {
+        val t = tape ?: return
+        Library.find(t.albumId)?.let { n ->
+            tape = n
+            Audio.track?.let { tr -> (n.a + n.b).firstOrNull { it.id == tr.id }?.let { Audio.relinkTrack(it) } }
+        }
+        notifyChanged()
+    }
+
     fun save() {
         val t = tape ?: return
         prefs().edit()
@@ -255,9 +268,9 @@ object Deck {
         var target = 0.0
         if (door < 0.02f && !flipping) target = when (mode) {
             Mode.PLAY -> dir.toDouble()
-            Mode.FF -> dir * WIND_X
-            Mode.REW -> -dir * WIND_X
-            Mode.AMS -> amsTarget?.let { sign(it - x) * WIND_X } ?: 0.0
+            Mode.FF -> dir * Prefs.windX.toDouble()
+            Mode.REW -> -dir * Prefs.windX.toDouble()
+            Mode.AMS -> amsTarget?.let { sign(it - x) * Prefs.windX.toDouble() } ?: 0.0
             Mode.STOP -> 0.0
         }
         // Motor: winding spins up over about a third of a second; play starts almost at once
@@ -297,7 +310,7 @@ object Deck {
         // Concentrato: emptier the faster it winds
         val sp = abs(v)
         val u = ((sp - 4) / 18).coerceIn(0.0, 1.0)
-        val ct = (u * u * (3 - 2 * u)).toFloat()
+        val ct = if (Prefs.concentrato) (u * u * (3 - 2 * u)).toFloat() else 0f
         conc += (ct - conc) * (1 - exp(-dt / 0.12)).toFloat()
 
         // Door and turning over
@@ -331,6 +344,7 @@ object Deck {
         }
 
         syncAudio()
+        Sfx.update(v, mode == Mode.PLAY)
         if (now - lastSave > 5000) { lastSave = now; save() }
     }
 
@@ -340,7 +354,7 @@ object Deck {
         if (want) {
             val cur = current()
             val tr = cur.track ?: return
-            if (Audio.track !== tr || !Audio.isActive()) Audio.play(app, tr, cur.into)
+            if (Audio.track?.id != tr.id || !Audio.isActive()) Audio.play(app, tr, cur.into)
         } else if (Audio.isActive()) {
             Audio.pause()
         }
@@ -378,7 +392,7 @@ object Audio {
 
     fun play(ctx: Context, tr: Track, offsetSecs: Double) {
         if (!requestFocus(ctx)) { Deck.stop(); return }
-        if (track === tr && mp != null) {
+        if (track?.id == tr.id && mp != null) {
             wantPlaying = true; offset = offsetSecs
             if (prepared) {
                 val p = mp!!
@@ -410,6 +424,8 @@ object Audio {
             p.prepareAsync()
         }.onFailure { Deck.trackEnded(tr) }
     }
+
+    internal fun relinkTrack(tr: Track) { track = tr }
 
     fun pause() {
         wantPlaying = false

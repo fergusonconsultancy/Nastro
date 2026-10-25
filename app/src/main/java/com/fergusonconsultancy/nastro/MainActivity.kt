@@ -11,6 +11,7 @@ import android.window.OnBackInvokedDispatcher
 
 class MainActivity : Activity() {
     private lateinit var stage: StageView
+    private lateinit var sheet: SettingsSheet
 
     private val audioPermission =
         if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
@@ -30,11 +31,23 @@ class MainActivity : Activity() {
             insets
         }
         stage.onAskPermission = { requestPermissions(arrayOf(audioPermission), 1) }
-        setContentView(stage)
+        // Settings that change the shelf rebuild it; the tape in the deck stays where it is
+        sheet = SettingsSheet(this) {
+            Library.reload(this) { Deck.relink(); stage.libraryChanged() }
+        }
+        stage.onOpenSettings = { sheet.show() }
+        sheet.setOnApplyWindowInsetsListener { v, insets ->
+            val b = insets.getInsets(WindowInsets.Type.systemBars())
+            v.setPadding(b.left, b.top, b.right, b.bottom); insets
+        }
+        val root = android.widget.FrameLayout(this)
+        root.addView(stage)
+        root.addView(sheet)
+        setContentView(root)
 
         if (Build.VERSION.SDK_INT >= 33) {
             onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT) {
-                if (!stage.back()) finish()
+                if (sheet.showing) sheet.hide() else if (!stage.back()) finish()
             }
         }
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -45,7 +58,7 @@ class MainActivity : Activity() {
 
     @Deprecated("Pre-33 back handling")
     override fun onBackPressed() {
-        if (!stage.back()) @Suppress("DEPRECATION") super.onBackPressed()
+        if (sheet.showing) sheet.hide() else if (!stage.back()) @Suppress("DEPRECATION") super.onBackPressed()
     }
 
     private fun start() {

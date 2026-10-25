@@ -26,10 +26,10 @@ import kotlin.math.pow
 import kotlin.math.sin
 
 /**
- * The whole screen. Folded, it is the Walkman's face: the door shut, the tape behind smoked
- * acrylic. Unfolded, the door has swung open on the crease: the right half is the compartment it
- * covered, with the tape at full colour, and the left half is the inside of the door, where the
- * shelf is kept. Opening the phone is opening the Walkman.
+ * The whole screen. Folded, it is the player: a closed, sculpted face with only the hubs showing
+ * through a slim lens. Unfolded, the door has swung open on the crease: the right half is the
+ * compartment, with the tape as large as the screen allows, and the left half is the inside of
+ * the door, where the shelf is kept. Opening the phone is opening the Walkman.
  */
 class StageView(ctx: Context) : View(ctx) {
     private val painter = Painter(ctx)
@@ -38,6 +38,11 @@ class StageView(ctx: Context) : View(ctx) {
 
     var needsPermission = false
     var onAskPermission: (() -> Unit)? = null
+    var onOpenSettings: (() -> Unit)? = null
+    private val audio = ctx.getSystemService(android.media.AudioManager::class.java)
+    private var volAt = 0L
+    private val live = Painter.Live()
+    private val settingsLink = RectF()
 
     private var open = false                 // unfolded: the compartment is open
     private var swing = 1f                   // the door swinging open after unfolding, 0..1
@@ -47,7 +52,8 @@ class StageView(ctx: Context) : View(ctx) {
     private var shake = 0f
     private var lastFrame = 0L
 
-    private var deck: DeckGeom? = null
+    private var deck: PlayerGeom? = null
+    private var face: PlayerGeom? = null           // the face over the right half, for the swing
     private val shelfArea = RectF()
     private var slots: List<Painter.Slot> = emptyList()
     private var lean = FloatArray(0)
@@ -69,23 +75,25 @@ class StageView(ctx: Context) : View(ctx) {
         setBackgroundColor(0xFF07090B.toInt())
         Deck.onEvent = { e ->
             when (e) {
-                Deck.Event.KEY -> performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                Deck.Event.FLIP -> performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                Deck.Event.REFUSED -> performHapticFeedback(HapticFeedbackConstants.REJECT)
-                Deck.Event.CLUNK -> clunk()
+                Deck.Event.KEY -> haptic(HapticFeedbackConstants.VIRTUAL_KEY)
+                Deck.Event.FLIP -> { haptic(HapticFeedbackConstants.CLOCK_TICK); Sfx.play(Sfx.S.FLIP, 0.5f) }
+                Deck.Event.REFUSED -> haptic(HapticFeedbackConstants.REJECT)
+                Deck.Event.CLUNK -> { Sfx.play(Sfx.S.SEAT); clunk() }
             }
             invalidate()
         }
     }
 
-    override fun onAttachedToWindow() { super.onAttachedToWindow(); Deck.listen(changed) }
-    override fun onDetachedFromWindow() { Deck.unlisten(changed); super.onDetachedFromWindow() }
+    override fun onAttachedToWindow() { super.onAttachedToWindow(); Deck.listen(changed); Prefs.listen(changed) }
+    override fun onDetachedFromWindow() { Deck.unlisten(changed); Prefs.unlisten(changed); super.onDetachedFromWindow() }
 
     private fun clunk() {
         shake = 1f
-        runCatching { vib?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK)) }
+        if (Prefs.haptics) runCatching { vib?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK)) }
         invalidate()
     }
+
+    private fun haptic(kind: Int) { if (Prefs.haptics) performHapticFeedback(kind) }
 
     fun libraryChanged() { slots = emptyList(); letters = emptyList(); layoutShelf(); invalidate() }
 
@@ -100,13 +108,14 @@ class StageView(ctx: Context) : View(ctx) {
         super.onSizeChanged(w, h, oldw, oldh)
         val nowOpen = w > h * 0.8f
         if (nowOpen && !open && oldw != 0) {
-            // Unfolding: the door swings open over the left half
-            swing = 0f; swingFrom = SystemClock.uptimeMillis()
+            // Unfolding: the door pops on its spring and swings open over the left half
+            swing = if (Prefs.doorSwing) 0f else 1f; swingFrom = SystemClock.uptimeMillis()
             Deck.doorShutQuietly(); view = 0f; viewTarget = 0f
+            Sfx.play(Sfx.S.DOOR_OPEN, 0.8f)
         } else if (!nowOpen && open) {
             // Folding: the door has shut; the face appears with the clunk of the catch
             swing = 1f; view = 0f; viewTarget = 0f
-            post { clunk() }
+            post { Sfx.play(Sfx.S.SEAT, 0.7f); clunk() }
         }
         open = nowOpen
         layoutAll()
@@ -118,12 +127,14 @@ class StageView(ctx: Context) : View(ctx) {
         if (W <= 0 || H <= 0) return
         if (open) {
             val half = width / 2f
-            val dw = min((width - half) * 0.84f, H * 0.92f * 0.62f)
-            deck = DeckGeom(half + ((width - half) - dw) / 2, T + H * 0.04f, dw, H * 0.92f, dens)
+            val m = (width - paddingRight - half) * 0.045f
+            val bw = width - paddingRight - half - m * 2
+            deck = PlayerGeom.bay(half + m, T + m, bw, H - m * 2)
+            face = PlayerGeom.face(half + m, T + m, bw, H - m * 2)
             shelfArea.set(L + dp(12f), T + dp(12f), half - dp(14f), T + H - dp(12f))
         } else {
             val v = easeOut(view)
-            deck = DeckGeom(L + W * 0.045f + v * W * 1.05f, T + H * 0.03f, W * 0.91f, H * 0.94f, dens)
+            deck = PlayerGeom.face(L + W * 0.05f + v * W * 1.05f, T + H * 0.03f, W * 0.9f, H * 0.94f)
             shelfArea.set(L + dp(10f) - (1 - v) * W * 1.05f, T + dp(10f), L + W - dp(10f) - (1 - v) * W * 1.05f, T + H - dp(10f))
         }
         layoutShelf()
@@ -136,7 +147,7 @@ class StageView(ctx: Context) : View(ctx) {
         val gap = max(dp(10f), shelfArea.width() * 0.035f)
         rail.set(shelfArea.right - dp(30f), shelfArea.top + dp(24f), shelfArea.right - dp(2f), shelfArea.bottom - dp(24f))
         val cw = (shelfArea.width() - dp(22f) - gap * (cols + 1)) / cols
-        val ch = cw * DeckGeom.CH / DeckGeom.CW
+        val ch = cw * PlayerGeom.CH / PlayerGeom.CW
         val head = dp(70f)
         // Updated in place each frame; rebuilt only when the library changes
         if (slots.size != tapes.size || slots.firstOrNull()?.tape !== tapes.firstOrNull()) slots = tapes.mapIndexed { i, t -> Painter.Slot(t, i, RectF()) }
@@ -167,7 +178,11 @@ class StageView(ctx: Context) : View(ctx) {
 
     private fun buildIndex() {
         val map = LinkedHashMap<Char, Int>()
-        Library.tapes.forEachIndexed { i, t -> if (t.indexLetter !in map) map[t.indexLetter] = i }
+        // Newest-first has no alphabet to index
+        if (Prefs.order != "newest") Library.tapes.forEachIndexed { i, t ->
+            val ch = if (Prefs.order == "album") t.album.lowercase().removePrefix("the ").firstOrNull()?.uppercaseChar()?.takeIf { it in 'A'..'Z' } ?: '#' else t.indexLetter
+            if (ch !in map) map[ch] = i
+        }
         firstOf = map; letters = map.keys.toList()
     }
 
@@ -179,7 +194,7 @@ class StageView(ctx: Context) : View(ctx) {
         val ch = letters[i]
         if (ch != indexLetter) {
             indexLetter = ch
-            performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            haptic(HapticFeedbackConstants.CLOCK_TICK)
             val first = firstOf[ch] ?: 0
             scroller.forceFinished(true)
             shelfScroll = ((first / cols) * rowH).coerceIn(0f, maxScroll())
@@ -225,16 +240,16 @@ class StageView(ctx: Context) : View(ctx) {
         c.save()
         if (shake > 0) c.translate(0f, (sin(now / 12.0) * shake * dp(1.6f)).toFloat())
         val lifting = Deck.pending != null && Deck.tape !== Deck.pending
+        live.pressed = pressed; live.pressAge = now - pressedAt; live.proximity = proximity; live.lifting = lifting
+        live.volume = volume(); live.volAge = now - volAt
         if (open) {
             if (swing >= 0.999f) {
-                painter.shelf(c, shelfArea, slots, lean, true, true, Library.tapes.size, shelfScroll)
-                drawIndex(c, now)
-                painter.deck(c, G, true, now, pressed, now - pressedAt, proximity, lifting)
+                drawShelf(c)
+                painter.bay(c, G, live)
             } else drawSwing(c, G, now, lifting)
         } else {
-            painter.shelf(c, shelfArea, slots, lean, true, false, Library.tapes.size, shelfScroll)
-            drawIndex(c, now)
-            painter.deck(c, G, false, now, pressed, now - pressedAt, proximity, lifting)
+            drawShelf(c)
+            painter.face(c, G, live)
         }
         // the tape in flight from the shelf
         val pend = Deck.pending
@@ -243,9 +258,9 @@ class StageView(ctx: Context) : View(ctx) {
             if (sl != null) {
                 val tt = easeOut(((now - Deck.pendingSince) / Deck.FLIGHT_MS.toFloat()).coerceIn(0f, 1f))
                 val fx = sl.rect.centerX(); val fy = sl.rect.centerY()
-                val k0 = sl.rect.width() / (DeckGeom.CW + 4); val k1 = G.k
+                val k0 = sl.rect.width() / (PlayerGeom.CW + 4); val k1 = G.k
                 c.save()
-                c.translate(lerp(fx, G.ccx - if (open) 4 * G.k else 0f, tt), lerp(fy, G.ccy, tt) - sin(tt * PI).toFloat() * dp(30f))
+                c.translate(lerp(fx, G.tx, tt), lerp(fy, G.ty, tt) - sin(tt * PI).toFloat() * dp(30f))
                 c.rotate(-90f * tt)
                 val kk = lerp(k0, k1, tt) * (1 + sin(tt * PI).toFloat() * 0.06f)
                 c.scale(kk, kk)
@@ -267,25 +282,53 @@ class StageView(ctx: Context) : View(ctx) {
     }
 
     /** Unfolding is opening the door: the face swings on the crease out over the left half, and its inside becomes the shelf. */
-    private fun drawSwing(c: Canvas, G: DeckGeom, now: Long, lifting: Boolean) {
+    private fun drawSwing(c: Canvas, G: PlayerGeom, now: Long, lifting: Boolean) {
         val cx = width / 2f
         val th = easeInOut(swing) * PI
         val cs = cos(th).toFloat()
         val shade = Paint()
-        painter.deck(c, G, true, now, pressed, now - pressedAt, proximity, lifting)
+        painter.bay(c, G, live)
         shade.color = Color.BLACK.a(0.55f * (1 - swing)); c.drawRect(cx, 0f, width.toFloat(), height.toFloat(), shade)
         c.save()
         c.translate(cx, 0f); c.scale(max(0.001f, abs(cs)), 1f); c.translate(-cx, 0f)
         if (cs > 0) {
             // the face, still shut over the compartment, turning away
-            painter.deck(c, G, false, now, null, 0, proximity, lifting)
+            face?.let { painter.face(c, it, live) }
             shade.color = Color.BLACK.a(0.5f * (1 - cs)); c.drawRect(cx, 0f, width.toFloat(), height.toFloat(), shade)
         } else {
             // the inside of the door coming down onto the left half
-            painter.shelf(c, shelfArea, slots, lean, true, true, Library.tapes.size, shelfScroll)
+            drawShelf(c)
             shade.color = Color.BLACK.a(0.5f * (1 + cs)); c.drawRect(0f, 0f, cx, height.toFloat(), shade)
         }
         c.restore()
+    }
+
+    private fun drawShelf(c: Canvas) {
+        painter.shelf(c, shelfArea, slots, lean, true, open, Library.tapes.size, shelfScroll)
+        // the way to the settings when unfolded: on the shelf's heading, scrolling away with it
+        val sy = shelfArea.top + dp(30f) - shelfScroll
+        if (sy > shelfArea.top) {
+            painter.label(c, "SETTINGS", shelfArea.right - dp(42f), sy, dp(12f), 0xFFD8E2EC.toInt())
+            settingsLink.set(shelfArea.right - dp(130f), sy - dp(22f), shelfArea.right - dp(32f), sy + dp(10f))
+        } else settingsLink.setEmpty()
+        drawIndex(c, SystemClock.uptimeMillis())
+    }
+
+    private fun volume(): Float = runCatching {
+        val m = audio.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+        audio.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) / m.toFloat()
+    }.getOrDefault(0.7f)
+
+    private fun setVolume(f: Float) {
+        runCatching {
+            val m = audio.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+            val idx = (f * m).toInt().coerceIn(0, m)
+            if (idx != audio.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)) {
+                audio.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, idx, 0)
+                haptic(HapticFeedbackConstants.CLOCK_TICK)
+            }
+        }
+        volAt = SystemClock.uptimeMillis()
     }
 
     private fun askScreen(c: Canvas) {
@@ -305,12 +348,21 @@ class StageView(ctx: Context) : View(ctx) {
     private var shelfFrom: Triple<Float, Float, Float>? = null  // y, scroll, max move
     private var vt: VelocityTracker? = null
     private var wasPlaying = false
+    private var wheelFrom: Pair<Float, Float>? = null           // y, volume
 
-    private fun hub(G: DeckGeom, left: Boolean): Pair<Float, Float> {
+    private fun hub(G: PlayerGeom, left: Boolean): Pair<Float, Float> {
         // shell (sx, sy) after rotate(-90°): screen = (sy, -sx) × k
         val sx = if (left) -21.25f else 21.25f
-        val shift = if (open) 4 * G.k else 0f
-        return Pair(G.ccx - shift + (-2f) * G.k, G.ccy - sx * G.k)
+        return Pair(G.tx + (-2f) * G.k, G.ty - sx * G.k)
+    }
+
+    private fun RectF.near(x: Float, y: Float, pad: Float) = x > left - pad && x < right + pad && y > top - pad && y < bottom + pad
+
+    private fun pressKey(k: Deck.Key) {
+        if (!Deck.hold) Sfx.play(when (k) { Deck.Key.PLAY -> Sfx.S.PLAY; Deck.Key.STOP -> Sfx.S.STOP; else -> Sfx.S.WIND_KEY })
+        val wasDoor = Deck.doorOpening
+        Deck.press(k)
+        if (!wasDoor && Deck.doorOpening) postDelayed({ Sfx.play(Sfx.S.DOOR_OPEN) }, 90)
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -322,12 +374,19 @@ class StageView(ctx: Context) : View(ctx) {
             MotionEvent.ACTION_DOWN -> {
                 scroller.forceFinished(true)
                 wakeLegends(G, x, y)
-                for (K in G.keys) if (hypot(x - K.x, y - K.y) < K.r * 1.3f) {
-                    pressed = K.key; pressedAt = SystemClock.uptimeMillis(); Deck.press(K.key); invalidate(); return true
+                if (open && settingsLink.near(x, y, dp(6f))) { onOpenSettings?.invoke(); return true }
+                if (!open || swing >= 0.999f) {
+                    for (K in G.keys) if (K.rect.near(x, y, dp(4f))) {
+                        pressed = K.key; pressedAt = SystemClock.uptimeMillis(); pressKey(K.key); invalidate(); return true
+                    }
                 }
-                for (T in G.legends) if (x > T.x && x < T.x + T.w && y > T.y - T.h && y < T.y + T.h * 0.6f) {
+                for (T in G.legends) if (x > T.x - dp(6f) && x < T.x + T.w && y > T.y - T.h && y < T.y + T.h * 0.4f) {
+                    if (!Deck.hold) Sfx.play(Sfx.S.STOP, 0.35f)
                     Deck.toggle(T.id); proximity[T.id] = 1f; invalidate(); return true
                 }
+                G.hold?.let { if (it.near(x, y, dp(10f))) { Sfx.play(Sfx.S.WIND_KEY, 0.5f); Deck.toggle("hold"); invalidate(); return true } }
+                G.battery?.let { if (it.near(x, y, dp(4f))) { Sfx.play(Sfx.S.DOOR_OPEN, 0.5f); onOpenSettings?.invoke(); return true } }
+                G.wheel?.let { if (it.near(x, y, dp(16f))) { wheelFrom = y to volume(); parent?.requestDisallowInterceptTouchEvent(true); return true } }
                 val inWin = x > G.win.left && x < G.win.right && y > G.win.top && y < G.win.bottom
                 if (inWin && Deck.door < 0.05f && Deck.pending == null && (open || view < 0.5f)) {
                     for (left in listOf(true, false)) {
@@ -355,6 +414,7 @@ class StageView(ctx: Context) : View(ctx) {
             }
             MotionEvent.ACTION_MOVE -> {
                 if (indexing) { indexAt(y); invalidate(); return true }
+                wheelFrom?.let { (y0, v0) -> setVolume((v0 + (y0 - y) / dp(220f)).coerceIn(0f, 1f)); invalidate(); return true }
                 wakeLegends(G, x, y)
                 wind?.let { (hx, hy, a0) ->
                     val a = atan2(y - hy, x - hx)
@@ -375,6 +435,7 @@ class StageView(ctx: Context) : View(ctx) {
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 if (indexing) { indexing = false; railTouchedAt = SystemClock.uptimeMillis(); invalidate(); return true }
+                if (wheelFrom != null) { wheelFrom = null; invalidate(); return true }
                 if (wind != null) { wind = null; Deck.dragging = false; if (wasPlaying) Deck.press(Deck.Key.PLAY) }
                 swipeFrom?.let { (x0, y0) ->
                     val dx = x - x0; val dy = y - y0
@@ -410,7 +471,7 @@ class StageView(ctx: Context) : View(ctx) {
         invalidate()
     }
 
-    private fun wakeLegends(G: DeckGeom, x: Float, y: Float) {
+    private fun wakeLegends(G: PlayerGeom, x: Float, y: Float) {
         // Giulietta: the printed switches brighten as the finger reaches towards them
         for (T in G.legends) {
             val d = hypot(x - (T.x + T.w / 2), y - T.y)

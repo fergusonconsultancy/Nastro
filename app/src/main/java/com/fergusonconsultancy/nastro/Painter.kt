@@ -25,72 +25,89 @@ fun Int.a(a: Float): Int {
     return (((base * a).coerceIn(0f, 1f) * 255).toInt() shl 24) or (this and 0xFFFFFF)
 }
 
-/** Geometry of the player, sized to its contents. Tall decks put the keys in a row under the window. */
-class DeckGeom(x: Float, y: Float, w: Float, h: Float, density: Float) {
-    class Key(val key: Deck.Key, val x: Float, val y: Float, val r: Float)
-    class Legend(val id: String, val text: String, val x: Float, val y: Float, val w: Float, val h: Float)
+/** A key in the channel: a stadium. */
+class KeyR(val key: Deck.Key, val rect: RectF)
+class Legend(val id: String, val text: String, val x: Float, val y: Float, val w: Float, val h: Float)
 
-    val tall = h / w > 1.9f
-    val x = x
-    val w = w
-    val y: Float
-    val h: Float
-    val lcd: RectF
-    val win: RectF
-    val keys: List<Key>
-    val leg: RectF
-    val legends: List<Legend>
-    val narrow: Boolean
-    val k: Float
-    val radius = w * 0.07f
-    val ccx: Float
-    val ccy: Float
-
-    init {
-        val pad = w * 0.07f
-        val gap = w * 0.04f
-        val lcdH = max(58f * density, w * 0.19f)
-        val kw = if (tall) 0f else w * 0.2f
-        val winW = w - pad * 2 - if (tall) 0f else kw + gap
-        val m = 8f * density
-        var kk = (winW - m * 2) / (CH + 6)
-        val keysH = if (tall) max(70f * density, w * 0.24f) else 0f
-        val legendH = max(66f * density, w * 0.17f)
-        var winH = CW * kk + m * 2
-        val fixed = pad * 0.7f + lcdH + gap + gap + keysH + (if (tall) gap else 0f) + legendH
-        if (fixed + winH > h) { winH = h - fixed; kk = (winH - m * 2) / CW }
-        val bodyH = fixed + winH
-        this.y = y + (h - bodyH) / 2
-        this.h = bodyH
-        k = kk
-        lcd = RectF(x + pad, this.y + pad * 0.7f, x + w - pad, this.y + pad * 0.7f + lcdH)
-        win = RectF(x + pad, lcd.bottom + gap, x + pad + winW, lcd.bottom + gap + winH)
-        keys = if (tall) {
-            val r = min(keysH * 0.36f, (w - pad * 2) / 9f)
-            val ky = win.bottom + gap + keysH / 2
-            listOf(Deck.Key.REW, Deck.Key.PLAY, Deck.Key.STOP, Deck.Key.FF).mapIndexed { i, kk2 ->
-                Key(kk2, x + pad + (w - pad * 2) * (0.125f + i * 0.25f), ky, r)
-            }
-        } else {
-            val kcx = win.right + gap + kw / 2
-            val r = min(kw * 0.36f, winH / 11f)
-            listOf(Deck.Key.PLAY, Deck.Key.STOP, Deck.Key.FF, Deck.Key.REW).mapIndexed { i, kk2 ->
-                Key(kk2, kcx, win.top + winH * 0.14f + i * (winH * 0.72f / 3), r)
-            }
-        }
-        leg = RectF(x + pad, this.y + bodyH - legendH, x + w - pad, this.y + bodyH)
-        narrow = leg.width() < 300 * density
-        val items = listOf("autoRev" to "AUTO REVERSE", "megaBass" to "MEGA BASS", "hold" to "HOLD")
-        legends = items.mapIndexed { i, (id, t) ->
-            if (narrow) Legend(id, t, leg.left + leg.width() * 0.52f, leg.top + leg.height() * (0.3f + i * 0.27f), leg.width() * 0.48f, leg.height() * 0.27f)
-            else Legend(id, t, leg.left + leg.width() * (i / 3f), leg.top + leg.height() * 0.66f, leg.width() / 3f, leg.height() * 0.5f)
-        }
-        ccx = win.centerX(); ccy = win.centerY()
-    }
+/**
+ * Where everything sits. [FACE] is the player with its door shut (folded); [BAY] is the open
+ * compartment (unfolded), where the tape is as large as the screen allows.
+ */
+class PlayerGeom private constructor(val kind: Kind, val x: Float, val w: Float) {
+    enum class Kind { FACE, BAY }
+    var y = 0f; var h = 0f
+    lateinit var lcd: RectF
+    lateinit var chan: RectF
+    lateinit var keys: List<KeyR>
+    /** The touch area over the tape: the lens, or the compartment. */
+    lateinit var win: RectF
+    var k = 1f; var tx = 0f; var ty = 0f
+    var legends: List<Legend> = emptyList()
+    var lid: RectF? = null
+    var lens: RectF? = null
+    var hold: RectF? = null
+    var battery: RectF? = null
+    var wheel: RectF? = null
+    var comp: RectF? = null
+    var radius = 0f
 
     companion object {
         const val CW = 100.4f
         const val CH = 63.8f
+        private const val REEL_Y = -2f
+
+        fun face(x: Float, y: Float, w: Float, h: Float): PlayerGeom = PlayerGeom(Kind.FACE, x, w).apply {
+            val lidH = (h - 0.94f * w).coerceIn(0.8f * w, 1.55f * w)
+            this.h = 0.94f * w + lidH
+            this.y = y + (h - this.h) / 2
+            radius = w * 0.12f
+            lcd = RectF(x + 0.09f * w, this.y + 0.08f * w, x + 0.91f * w, this.y + 0.28f * w)
+            val ld = RectF(x + 0.055f * w, lcd.bottom + 0.06f * w, x + 0.945f * w, lcd.bottom + 0.06f * w + lidH)
+            lid = ld
+            k = (ld.height() * 0.6f) / 74f                    // the lens shows both hubs: 74 mm of shell
+            val lcx = ld.centerX(); val lcy = ld.top + ld.height() * 0.45f
+            val ln = RectF(lcx - 15 * k, lcy - 37 * k, lcx + 15 * k, lcy + 37 * k)
+            lens = ln
+            tx = lcx - REEL_Y * k; ty = lcy
+            win = RectF(ln)
+            chan = RectF(x + 0.055f * w, ld.bottom + 0.06f * w, x + 0.945f * w, ld.bottom + 0.28f * w)
+            keys = keyRow(chan)
+            val st = RectF(x + 0.07f * w, chan.bottom + 0.05f * w, x + 0.93f * w, chan.bottom + 0.25f * w)
+            hold = RectF(st.left, st.top + st.height() * 0.18f, st.left + st.width() * 0.26f, st.top + st.height() * 0.52f)
+            legends = listOf(
+                Legend("megaBass", "MEGA BASS", st.left + st.width() * 0.34f, st.top + st.height() * 0.36f, st.width() * 0.34f, st.height() * 0.4f),
+                Legend("autoRev", "AUTO REV", st.left + st.width() * 0.34f, st.top + st.height() * 0.8f, st.width() * 0.34f, st.height() * 0.4f),
+            )
+            battery = RectF(st.left + st.width() * 0.72f, st.top + st.height() * 0.06f, st.right, st.top + st.height() * 0.94f)
+            wheel = RectF(x + w - 0.012f * w, ld.top + ld.height() * 0.08f, x + w + 0.033f * w, ld.top + ld.height() * 0.08f + 0.36f * w)
+        }
+
+        fun bay(x: Float, y: Float, w: Float, h: Float): PlayerGeom = PlayerGeom(Kind.BAY, x, w).apply {
+            this.y = y; this.h = h
+            radius = w * 0.08f
+            lcd = RectF(x + 0.07f * w, y + 0.05f * w, x + 0.93f * w, y + 0.22f * w)
+            val chanH = 0.2f * w
+            chan = RectF(x + 0.05f * w, y + h - chanH - 0.05f * w, x + 0.95f * w, y + h - 0.05f * w)
+            keys = keyRow(chan)
+            val c = RectF(x + 0.035f * w, lcd.bottom + 0.045f * w, x + 0.965f * w, chan.top - 0.045f * w)
+            comp = c
+            k = minOf((c.width() - 0.07f * w) / CH, (c.height() - 0.06f * w) / (CW + 10))
+            tx = c.centerX() - 4 * k; ty = c.centerY()
+            win = RectF(c)
+        }
+
+        /** One membrane of four keys, play the widest, in a recessed channel. */
+        fun keyRow(chan: RectF): List<KeyR> {
+            val pad = chan.height() * 0.16f; val gap = chan.height() * 0.1f
+            val units = floatArrayOf(1f, 1.32f, 1f, 1f)
+            val order = listOf(Deck.Key.REW, Deck.Key.PLAY, Deck.Key.STOP, Deck.Key.FF)
+            val unit = (chan.width() - pad * 2 - gap * 3) / units.sum()
+            var kx = chan.left + pad
+            return order.mapIndexed { i, key ->
+                val kw = unit * units[i]
+                KeyR(key, RectF(kx, chan.top + pad, kx + kw, chan.bottom - pad)).also { kx += kw + gap }
+            }
+        }
     }
 }
 
@@ -116,8 +133,8 @@ class Painter(ctx: Context) {
     private val path = Path()
     private val r = RectF()
 
-    private val CW = DeckGeom.CW
-    private val CH = DeckGeom.CH
+    private val CW = PlayerGeom.CW
+    private val CH = PlayerGeom.CH
     private val HUB = Deck.HUB_R
     private val PACK = Deck.PACK_R
     private val RDX = 21.25f
@@ -396,197 +413,351 @@ class Painter(ctx: Context) {
     }
 
     // ---- the player ----------------------------------------------------------------------------------
+    /** What the stage knows that the painter needs: the touch, the reach, the volume. */
+    class Live(
+        var pressed: Deck.Key? = null, var pressAge: Long = 9999, var proximity: Map<String, Float> = emptyMap(),
+        var lifting: Boolean = false, var volume: Float = 0.7f, var volAge: Long = 9999,
+    )
+
+    /** Light blue and grey were the WM-EX610's own; graphite and rosso are ours. */
+    class Finish(val stops: IntArray, val lid: IntArray, val key: IntArray, val ink: Int, val deep: Int, val chan: Int,
+                 val etchLight: Boolean = false, val sym: Int = 0xB81E242C.toInt())
+
+    private fun col(v: Number) = v.toInt()
+    val finishes = linkedMapOf(
+        "blue" to Finish(intArrayOf(col(0xFFBFD4E8), col(0xFF9FBAD4), col(0xFF7593B3)), intArrayOf(col(0xFFC8DBED), col(0xFFA5BFD8)),
+            intArrayOf(col(0xFFD9DDE2), col(0xFF8E959D)), col(0xC7FFFFFF), col(0x7316283E), col(0xFF5B6F84)),
+        "grey" to Finish(intArrayOf(col(0xFFE2E5E9), col(0xFFC2C7CD), col(0xFF979EA6)), intArrayOf(col(0xFFE9ECEF), col(0xFFC9CED4)),
+            intArrayOf(col(0xFFF0F2F4), col(0xFF9EA5AD)), col(0xB8282E36), col(0x591E242C), col(0xFF7C838C)),
+        "graphite" to Finish(intArrayOf(col(0xFF61676F), col(0xFF41474E), col(0xFF2A2E33)), intArrayOf(col(0xFF6A7078), col(0xFF474D54)),
+            intArrayOf(col(0xFF8A9097), col(0xFF3E444B)), col(0xB8EBEFF3), col(0x80000000), col(0xFF25292E), true, col(0xD9EBEFF3)),
+        "rosso" to Finish(intArrayOf(col(0xFFD2363E), col(0xFFA8141E), col(0xFF6E0A12)), intArrayOf(col(0xFFDC4048), col(0xFFB01A24)),
+            intArrayOf(col(0xFFE9E4DC), col(0xFFA49C90)), col(0xCCFFF4E8), col(0x80320006), col(0xFF5E0910), true),
+    )
+    private fun finish() = finishes[Prefs.finish] ?: finishes.getValue("blue")
+
     private var brushed: Bitmap? = null
-    private fun brush(w: Int, h: Int): Bitmap {
-        brushed?.let { if (it.width >= w && it.height >= h) return it }
-        val b = Bitmap.createBitmap(max(1, w), max(1, h), Bitmap.Config.ARGB_8888)
+    private fun brush(size: Int): Bitmap {
+        brushed?.let { if (it.width >= size) return it }
+        val n = max(1, size)
+        val b = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
         val cv = Canvas(b); val pp = Paint()
         val rnd = java.util.Random(7)
         val step = max(1, dens.toInt())
-        for (yy in 0 until h step step) {
+        for (yy in 0 until n step step) {
             val a = 0.03f + rnd.nextFloat() * 0.07f
             pp.color = if (rnd.nextBoolean()) Color.WHITE.a(a) else 0xFF142846.toInt().a(a)
-            cv.drawRect(0f, yy.toFloat(), w.toFloat(), (yy + step).toFloat(), pp)
+            cv.drawRect(0f, yy.toFloat(), n.toFloat(), (yy + step).toFloat(), pp)
         }
         brushed = b
         return b
     }
 
-    /** The Walkman: its face with the door shut ([open] false), or the open compartment ([open] true). */
-    fun deck(c: Canvas, G: DeckGeom, open: Boolean, now: Long, pressed: Deck.Key?, pressAge: Long, proximity: Map<String, Float>, lifting: Boolean) {
-        val detail = 1 - Deck.conc
-        val x = G.x; val y = G.y; val w = G.w; val h = G.h
-        val rad = G.radius
-        // body: light-blue anodised aluminium, brushed
-        r.set(x, y, x + w, y + h)
-        p.shader = LinearGradient(x, y, x + w, y + h, intArrayOf(0xFFB9CFE4.toInt(), 0xFF9FBAD4.toInt(), 0xFF7F9DBB.toInt()), floatArrayOf(0f, 0.45f, 1f), Shader.TileMode.CLAMP)
-        p.setShadowLayer(dp(30f), 0f, dp(14f), 0x8C000000.toInt())
-        c.drawRoundRect(r, rad, rad, p); p.clearShadowLayer(); p.shader = null
-        c.save(); path.reset(); path.addRoundRect(r, rad, rad, Path.Direction.CW); c.clipPath(path)
-        val bm = brush(w.toInt() + 1, h.toInt() + 1)
-        p.shader = BitmapShader(bm, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply {
-            setLocalMatrix(android.graphics.Matrix().apply { setTranslate(x, y) })
-        }
-        p.alpha = 230; c.drawRect(r, p); p.alpha = 255; p.shader = null
-        p.shader = RadialGradient(x + w * 0.25f, y + h * 0.05f, w * 0.9f, 0x47FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP)
-        c.drawRect(r, p); p.shader = null
+    /** Brushed anodised metal: horizontal on the body, vertical on the lid so it reads as its own panel. */
+    private fun metal(c: Canvas, R: RectF, rad: Float, stops: IntArray, vertical: Boolean) {
+        p.shader = LinearGradient(R.left, R.top, R.left + R.width() * 0.7f, R.bottom, stops, floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
+        c.drawRoundRect(R, rad, rad, p); p.shader = null
+        c.save(); path.reset(); path.addRoundRect(R, rad, rad, Path.Direction.CW); c.clipPath(path)
+        val bm = brush(max(R.width(), R.height()).toInt() + 2)
+        p.alpha = 190
+        if (vertical) { c.translate(R.right, R.top); c.rotate(90f); c.drawBitmap(bm, Rect(0, 0, R.height().toInt() + 1, R.width().toInt() + 1), RectF(0f, 0f, R.height(), R.width()), p) }
+        else c.drawBitmap(bm, Rect(0, 0, R.width().toInt() + 1, R.height().toInt() + 1), R, p)
+        p.alpha = 255
         c.restore()
-        s.strokeWidth = dp(1.2f); s.color = 0x8CFFFFFF.toInt(); r.set(x + 0.6f, y + 0.6f, x + w - 0.6f, y + h - 0.6f); c.drawRoundRect(r, rad, rad, s)
-        s.strokeWidth = 1f; s.color = 0x59142337; r.set(x + dp(3f), y + dp(3f), x + w - dp(3f), y + h - dp(3f)); c.drawRoundRect(r, rad * 0.93f, rad * 0.93f, s)
+    }
 
-        lcdPanel(c, G.lcd, detail)
+    /** Light from the upper left catches the top and left edges; the rest falls into shade. */
+    private fun bevel(c: Canvas, R: RectF, rad: Float, strength: Float = 1f) {
+        s.strokeWidth = dp(0.9f)
+        s.shader = LinearGradient(R.left, R.top, R.right, R.bottom,
+            intArrayOf(Color.WHITE.a(0.75f * strength), Color.WHITE.a(0.12f * strength), Color.BLACK.a(0.35f * strength)), floatArrayOf(0f, 0.45f, 1f), Shader.TileMode.CLAMP)
+        r.set(R.left + dp(0.5f), R.top + dp(0.5f), R.right - dp(0.5f), R.bottom - dp(0.5f)); c.drawRoundRect(r, rad, rad, s)
+        s.shader = null
+    }
 
-        // window recess, or the compartment
-        val Wn = G.win
-        c.save()
-        if (open) {
-            val e = dp(12f)
-            val cx0 = Wn.left - e; val cy0 = Wn.top - e; val cx1 = Wn.right + e + dp(10f); val cy1 = Wn.bottom + e
-            r.set(cx0 - dp(2f), cy0 - dp(2f), cx1 + dp(2f), cy1 + dp(2f)); fill(0x8CE8F0F8.toInt()); c.drawRoundRect(r, dp(18f), dp(18f), p)
-            r.set(cx0, cy0, cx1, cy1); path.reset(); path.addRoundRect(r, dp(16f), dp(16f), Path.Direction.CW); c.clipPath(path)
-            p.shader = LinearGradient(cx0, cy0, cx1, cy1, 0xFF3A424C.toInt(), 0xFF20262D.toInt(), Shader.TileMode.CLAMP)
-            c.drawRect(r, p); p.shader = null
-            s.strokeWidth = 1f; s.color = 0x0FFFFFFF
-            var yy = cy0 + dp(12f); val step = dp(8f)
-            while (yy < cy1) { c.drawLine(cx0 + dp(8f), yy, cx1 - dp(8f), yy, s); yy += step }
-            p.shader = LinearGradient(0f, cy0, 0f, cy0 + dp(26f), 0x8C000000.toInt(), 0, Shader.TileMode.CLAMP); c.drawRect(cx0, cy0, cx1, cy0 + dp(40f), p)
-            p.shader = LinearGradient(cx0, 0f, cx0 + dp(22f), 0f, 0x8C000000.toInt(), 0, Shader.TileMode.CLAMP); c.drawRect(cx0, cy0, cx0 + dp(34f), cy1, p)
-            p.shader = null
-            c.save(); c.translate(G.ccx - 2 * G.k, G.ccy); c.rotate(-90f); c.scale(G.k, G.k); mechanism(c); c.restore()
+    /** A recess: shade falls from its upper edge, light catches its lower lip. */
+    private fun recess(c: Canvas, R: RectF, rad: Float, fillCol: Int) {
+        fill(fillCol); c.drawRoundRect(R, rad, rad, p)
+        c.save(); path.reset(); path.addRoundRect(R, rad, rad, Path.Direction.CW); c.clipPath(path)
+        p.shader = LinearGradient(0f, R.top, 0f, R.top + R.height() * 0.45f, Color.BLACK.a(0.45f), 0, Shader.TileMode.CLAMP); c.drawRect(R, p)
+        p.shader = LinearGradient(R.left, 0f, R.left + R.width() * 0.12f, 0f, Color.BLACK.a(0.25f), 0, Shader.TileMode.CLAMP); c.drawRect(R, p)
+        p.shader = null; c.restore()
+        s.strokeWidth = dp(0.8f)
+        s.shader = LinearGradient(0f, R.top, 0f, R.bottom, Color.BLACK.a(0.35f), Color.WHITE.a(0.55f), Shader.TileMode.CLAMP)
+        r.set(R.left - dp(0.4f), R.top - dp(0.4f), R.right + dp(0.4f), R.bottom + dp(0.4f)); c.drawRoundRect(r, rad, rad, s)
+        s.shader = null
+    }
+
+    /** Plain printed caps in the deck's type, for the stage's own labels. */
+    fun label(c: Canvas, text: String, x: Float, y: Float, size: Float, color: Int) = print(c, text, x, y, size, color, true, Paint.Align.RIGHT, size * 0.2f)
+
+    /** Engraved type: a dark cut with a lit lower edge, or, through dark anodising, bright metal. */
+    private fun engrave(c: Canvas, text: String, x: Float, y: Float, size: Float, F: Finish, align: Paint.Align = Paint.Align.LEFT, track: Float = 0.14f) {
+        if (F.etchLight) {
+            print(c, text, x, y - dp(0.5f), size, Color.BLACK.a(0.45f), true, align, size * track)
+            print(c, text, x, y, size, F.ink, true, align, size * track)
         } else {
-            r.set(Wn.left - dp(4f), Wn.top - dp(4f), Wn.right + dp(4f), Wn.bottom + dp(4f)); fill(0x8C1E2D3E.toInt()); c.drawRoundRect(r, dp(14f), dp(14f), p)
-            r.set(Wn); fill(0xFF14181E.toInt()); c.drawRoundRect(r, dp(11f), dp(11f), p)
-            path.reset(); path.addRoundRect(r, dp(11f), dp(11f), Path.Direction.CW); c.clipPath(path)
+            print(c, text, x, y + dp(0.5f), size, Color.WHITE.a(0.35f), true, align, size * track)
+            print(c, text, x, y, size, F.deep, true, align, size * track)
         }
-        // the tape
+    }
+
+    // ---- the readout ----------------------------------------------------------------------------------
+    private fun lcd(c: Canvas, L: RectF, detail: Float, live: Live) {
+        recess(c, L, L.height() * 0.22f, 0xFF2A3038.toInt())
+        val inset = L.height() * 0.09f
+        val I = RectF(L.left + inset, L.top + inset, L.right - inset, L.bottom - inset)
+        c.save(); path.reset(); path.addRoundRect(I, L.height() * 0.14f, L.height() * 0.14f, Path.Direction.CW); c.clipPath(path)
+        p.shader = LinearGradient(0f, I.top, 0f, I.bottom, 0xFFA7B29A.toInt(), 0xFF8F9A84.toInt(), Shader.TileMode.CLAMP)
+        c.drawRect(I, p); p.shader = null
+        val on = 0xFF1B2117.toInt(); val off = 0x121B2117
+        val row = I.height() * 0.62f; val dh = row * 0.72f; val dw = dh * 0.5f; val dy = I.top + row * 0.16f
+        print(c, Deck.sideLetter.toString(), I.left + I.width() * 0.05f, dy + dh * 0.92f, dh * 0.9f, on, true)
+        val ax = I.left + I.width() * 0.05f + dh * 0.6f; val ay = dy + dh * 0.5f
+        path.reset()
+        if (Deck.dir > 0) { path.moveTo(ax, ay - dh * 0.17f); path.lineTo(ax + dh * 0.28f, ay); path.lineTo(ax, ay + dh * 0.17f) }
+        else { path.moveTo(ax + dh * 0.28f, ay - dh * 0.17f); path.lineTo(ax, ay); path.lineTo(ax + dh * 0.28f, ay + dh * 0.17f) }
+        path.close()
+        fill(if (Deck.mode == Deck.Mode.PLAY || Deck.mode == Deck.Mode.AMS) on else off); c.drawPath(path, p)
+        val cnt = Deck.counter().toString().padStart(3, '0')
+        val c0 = I.left + I.width() * 0.25f
+        for (i in 0 until 3) seg7(c, cnt[i], c0 + i * dw * 1.34f, dy, dw, dh, on, off)
+        val cur = Deck.current()
+        fun mm(sec: Double) = "${(sec / 60).toInt()}:${(sec % 60).toInt().toString().padStart(2, '0')}"
+        val fs = max(dp(10f), row * 0.26f)
+        print(c, (cur.track?.number ?: 0).toString().padStart(2, '0'), I.right - I.width() * 0.05f, I.top + row * 0.46f, fs, on, true, Paint.Align.RIGHT)
+        print(c, "${mm(max(0.0, cur.into))} / ${mm(cur.track?.durSecs ?: 0.0)}", I.right - I.width() * 0.05f, I.top + row * 0.86f, fs, on.a(detail), true, Paint.Align.RIGHT)
+        val ix2 = c0 + 3 * dw * 1.34f + dw * 0.2f
+        if (Deck.megaBass) print(c, "MB", ix2, I.top + row * 0.46f, fs * 0.85f, on.a(detail), true)
+        if (Deck.autoRev) print(c, "⇄", ix2, I.top + row * 0.86f, fs * 0.85f, on.a(detail), true)
+        // bottom row: the track's title, running like a marquee when it is long; the volume while the wheel turns
+        val title = if (live.volAge < 1300) {
+            val n = (live.volume * 12).toInt().coerceIn(0, 12); "VOLUME  " + "▮".repeat(n) + "▯".repeat(12 - n)
+        } else (cur.track?.title ?: "").uppercase()
+        val ts = I.height() * 0.2f
+        t.typeface = printM; t.textSize = ts; t.letterSpacing = 0.06f
+        val tw = t.measureText(title); val room = I.width() * 0.9f
+        val off2 = if (tw > room) ((android.os.SystemClock.uptimeMillis() / 40f) % (tw + dp(40f))) else 0f
+        c.save(); c.clipRect(I.left + I.width() * 0.05f, I.top + row, I.left + I.width() * 0.05f + room, I.bottom)
+        print(c, title, I.left + I.width() * 0.05f - off2, I.top + I.height() * 0.9f, ts, on.a(detail * 0.9f), false, Paint.Align.LEFT, ts * 0.06f)
+        if (tw > room) print(c, title, I.left + I.width() * 0.05f - off2 + tw + dp(40f), I.top + I.height() * 0.9f, ts, on.a(detail * 0.9f), false, Paint.Align.LEFT, ts * 0.06f)
+        c.restore()
+        p.shader = LinearGradient(I.left, I.top, I.left + I.width() * 0.6f, I.bottom, intArrayOf(Color.WHITE.a(0.22f), Color.WHITE.a(0.05f), 0), floatArrayOf(0f, 0.35f, 1f), Shader.TileMode.CLAMP)
+        c.drawRect(I, p); p.shader = null
+        c.restore()
+    }
+
+    // ---- the keys: one membrane. The pressed key sinks; its neighbours tilt towards it. ------------
+    private fun keys(c: Canvas, G: PlayerGeom, F: Finish, live: Live) {
+        val C = G.chan
+        recess(c, C, C.height() / 2, F.chan)
+        val m = Deck.mode
+        fun latched(k: Deck.Key) = when (k) {
+            Deck.Key.PLAY -> m == Deck.Mode.PLAY
+            Deck.Key.FF -> m == Deck.Mode.FF || (m == Deck.Mode.AMS && Deck.v * Deck.dir > 0)
+            Deck.Key.REW -> m == Deck.Mode.REW || (m == Deck.Mode.AMS && Deck.v * Deck.dir < 0)
+            Deck.Key.STOP -> false
+        }
+        fun depth(k: Deck.Key) = max(if (latched(k)) 0.55f else 0f, if (live.pressed == k) max(0f, 1 - live.pressAge / 170f) else 0f)
+        val idx = G.keys.indexOfFirst { depth(it.key) > 0.05f }
+        for ((i, K) in G.keys.withIndex()) {
+            val d = depth(K.key)
+            val tilt = if (idx >= 0 && i != idx) (depth(G.keys[idx].key) * 0.5f / kotlin.math.abs(i - idx)).coerceIn(0f, 0.4f) * kotlin.math.sign((idx - i).toFloat()) else 0f
+            val R = K.rect; val rad = R.height() / 2
+            c.save(); c.translate(0f, d * R.height() * 0.07f)
+            p.shader = LinearGradient(R.left - R.width() * tilt * 0.5f, R.top, R.right + R.width() * tilt * 0.5f, R.bottom,
+                if (d > 0.3f) darken(F.key[0], 0.12f) else F.key[0], if (d > 0.3f) darken(F.key[1], 0.12f) else F.key[1], Shader.TileMode.CLAMP)
+            p.setShadowLayer(dp(4f) * (1 - d), 0f, dp(1.6f) * (1 - d), 0x73000000)
+            c.drawRoundRect(R, rad, rad, p); p.clearShadowLayer()
+            p.shader = RadialGradient(R.centerX(), R.top + R.height() * 0.62f, R.width() * 0.55f, Color.BLACK.a(0.08f), 0, Shader.TileMode.CLAMP)
+            c.drawRoundRect(R, rad, rad, p); p.shader = null
+            bevel(c, R, rad, 0.9f)
+            val cx = R.centerX(); val cy = R.centerY(); val q = R.height() * 0.2f
+            path.reset()
+            when (K.key) {
+                Deck.Key.PLAY -> { path.moveTo(cx - q * 0.7f, cy - q); path.lineTo(cx + q, cy); path.lineTo(cx - q * 0.7f, cy + q); path.close() }
+                Deck.Key.STOP -> path.addRect(cx - q * 0.75f, cy - q * 0.75f, cx + q * 0.75f, cy + q * 0.75f, Path.Direction.CW)
+                Deck.Key.FF -> { path.moveTo(cx - q, cy - q * 0.8f); path.lineTo(cx, cy); path.lineTo(cx - q, cy + q * 0.8f); path.close(); path.moveTo(cx, cy - q * 0.8f); path.lineTo(cx + q, cy); path.lineTo(cx, cy + q * 0.8f); path.close() }
+                Deck.Key.REW -> { path.moveTo(cx + q, cy - q * 0.8f); path.lineTo(cx, cy); path.lineTo(cx + q, cy + q * 0.8f); path.close(); path.moveTo(cx, cy - q * 0.8f); path.lineTo(cx - q, cy); path.lineTo(cx, cy + q * 0.8f); path.close() }
+            }
+            c.save(); c.translate(0f, dp(0.6f)); fill(Color.WHITE.a(0.45f)); c.drawPath(path, p); c.restore()
+            fill(F.sym); c.drawPath(path, p)
+            // tactile dot on play, for finding it blind
+            if (K.key == Deck.Key.PLAY) { fill(Color.WHITE.a(0.85f)); c.drawCircle(cx + R.width() * 0.3f, cy, max(dp(1.6f), R.height() * 0.06f), p) }
+            c.restore()
+        }
+    }
+
+    private fun darken(col: Int, amt: Float): Int {
+        val r0 = (col shr 16) and 255; val g0 = (col shr 8) and 255; val b0 = col and 255
+        fun f(v: Int) = (v * (1 - amt)).toInt().coerceIn(0, 255)
+        return (col and 0xFF000000.toInt()) or (f(r0) shl 16) or (f(g0) shl 8) or f(b0)
+    }
+
+    // ---- the face: the player with its door shut ---------------------------------------------------
+    fun face(c: Canvas, G: PlayerGeom, live: Live) {
+        val F = finish()
+        val detail = 1 - Deck.conc
+        val body = RectF(G.x, G.y, G.x + G.w, G.y + G.h)
+        val R = G.radius; val w = G.w
+        fill(F.stops[2]); p.setShadowLayer(dp(24f), 0f, dp(10f), 0x99000000.toInt()); c.drawRoundRect(body, R, R, p); p.clearShadowLayer()
+        G.wheel?.let { wheel(c, it, live.volume) }
+        metal(c, body, R, F.stops, false)
+        c.save(); path.reset(); path.addRoundRect(body, R, R, Path.Direction.CW); c.clipPath(path)
+        p.shader = RadialGradient(body.left + w * 0.18f, body.top + G.h * 0.02f, w * 1.1f, Color.WHITE.a(0.32f), 0, Shader.TileMode.CLAMP)
+        c.drawRect(body, p); p.shader = null
+        c.restore()
+        bevel(c, body, R)
+        G.wheel?.let { fill(Color.BLACK.a(0.35f)); r.set(it.left - dp(0.6f), it.top - dp(1.2f), it.left + it.width() * 0.5f, it.bottom + dp(1.2f)); c.drawRoundRect(r, dp(2f), dp(2f), p) }
+
+        lcd(c, G.lcd, detail, live)
+
+        // the lid: the door you open by unfolding, brushed the other way, with a seam
+        val Ld = G.lid ?: return
+        val lr = w * 0.07f
+        fill(F.lid[1]); p.setShadowLayer(dp(3f), 0f, dp(1f), 0x47000000); c.drawRoundRect(Ld, lr, lr, p); p.clearShadowLayer()
+        metal(c, Ld, lr, intArrayOf(F.lid[0], F.lid[1], F.stops[1]), true)
+        c.save(); path.reset(); path.addRoundRect(Ld, lr, lr, Path.Direction.CW); c.clipPath(path)
+        p.shader = RadialGradient(Ld.left + Ld.width() * 0.4f, Ld.top + Ld.height() * 0.32f, Ld.height() * 0.85f,
+            intArrayOf(Color.WHITE.a(0.22f), 0, Color.BLACK.a(0.14f)), floatArrayOf(0f, 0.6f, 1f), Shader.TileMode.CLAMP)
+        c.drawRect(Ld, p); p.shader = null
+        c.restore()
+        s.strokeWidth = dp(1f); s.color = Color.BLACK.a(0.42f); r.set(Ld.left - dp(0.5f), Ld.top - dp(0.5f), Ld.right + dp(0.5f), Ld.bottom + dp(0.5f)); c.drawRoundRect(r, lr, lr, s)
+        s.strokeWidth = dp(0.6f); s.color = Color.WHITE.a(0.5f); r.set(Ld.left + dp(0.4f), Ld.top + dp(0.4f), Ld.right - dp(0.4f), Ld.bottom - dp(0.4f)); c.drawRoundRect(r, lr, lr, s)
+
+        lens(c, G, detail, live.lifting)
+
+        val fs = max(dp(9f), w * 0.034f)
+        engrave(c, "AUTO REVERSE", Ld.right - Ld.width() * 0.07f, Ld.top + Ld.height() * 0.075f, fs, F, Paint.Align.RIGHT, 0.2f)
+        // operation lamp
+        val lx = Ld.left + Ld.width() * 0.09f; val ly = Ld.top + Ld.height() * 0.065f
+        val on = Deck.mode == Deck.Mode.PLAY
+        if (on) { p.shader = RadialGradient(lx, ly, w * 0.05f, 0x99FFAD33.toInt(), 0, Shader.TileMode.CLAMP); c.drawCircle(lx, ly, w * 0.05f, p); p.shader = null }
+        fill(if (on) 0xFFFFB347.toInt() else 0x8C3C2814.toInt()); c.drawCircle(lx, ly, max(dp(2f), w * 0.011f), p)
+        engrave(c, "OPR", lx + w * 0.03f, ly + fs * 0.35f, fs * 0.85f, F, Paint.Align.LEFT, 0.2f)
+        // which way it opens: towards the hinge
+        c.save(); c.translate(Ld.left + Ld.width() * 0.07f, Ld.top + Ld.height() * 0.6f); c.rotate(-90f)
+        engrave(c, "OPEN", 0f, 0f, fs * 0.9f, F, Paint.Align.CENTER, 0.3f); c.restore()
+        val axx = Ld.left + Ld.width() * 0.055f; val ayy = Ld.top + Ld.height() * 0.6f + fs * 2.6f; val aS = fs * 0.42f
+        path.reset(); path.moveTo(axx - aS, ayy); path.lineTo(axx + aS * 0.6f, ayy - aS * 0.8f); path.lineTo(axx + aS * 0.6f, ayy + aS * 0.8f); path.close()
+        fill(if (F.etchLight) F.ink else F.deep); c.drawPath(path, p)
+        // the wordmark, deep-cut
+        engrave(c, "NASTRO", Ld.centerX(), Ld.bottom - Ld.height() * 0.075f, min(w * 0.11f, dp(44f)), F, Paint.Align.CENTER, 0.42f)
+
+        keys(c, G, F, live)
+        strip(c, G, F, detail, live)
+    }
+
+    private fun lens(c: Canvas, G: PlayerGeom, detail: Float, lifting: Boolean) {
+        val L = G.lens ?: return
+        val rad = L.width() / 2
+        r.set(L.left - dp(2f), L.top - dp(2f), L.right + dp(2f), L.bottom + dp(2f))
+        p.shader = LinearGradient(L.left, L.top, L.right, L.bottom, intArrayOf(0xFFF4F6F8.toInt(), 0xFF8B939C.toInt(), 0xFFD9DEE3.toInt()), null, Shader.TileMode.CLAMP)
+        c.drawRoundRect(r, rad + dp(2f), rad + dp(2f), p); p.shader = null
+        fill(0xFF0C0F13.toInt()); c.drawRoundRect(L, rad, rad, p)
+        c.save(); path.reset(); path.addRoundRect(L, rad, rad, Path.Direction.CW); c.clipPath(path)
         val tape = Deck.tape
-        val doorT = easeOut(Deck.door)
-        if (tape != null && !(lifting && !open)) {
-            c.save()
-            c.translate(G.ccx - if (open) 4 * G.k else 0f, G.ccy - if (open) 0f else doorT * Wn.height() * 0.04f)
+        if (tape != null && !lifting) {
+            c.save(); c.translate(G.tx, G.ty)
             val fl = if (Deck.flipping) cos(Deck.flip * PI).toFloat() else 1f
             c.rotate(-90f); c.scale(G.k, G.k * max(0.02f, kotlin.math.abs(fl)))
             val facing = if (Deck.flipping && Deck.flip > 0.5f) (if (Deck.facing == 'A') 'B' else 'A') else Deck.facing
-            cassette(c, tape, true, detail, facing, spindle = open, shadow = if (open) 4f else 0f)
+            cassette(c, tape, true, detail, facing)
             c.restore()
         }
-        if (!open) {
-            // smoked acrylic door with one highlight; it tilts open from its foot on the cover screen
-            c.save()
-            c.translate(Wn.left, Wn.bottom); c.scale(1f, 1 - doorT * 0.12f)
-            fill(0xFF162232.toInt().a(0.46f + doorT * 0.2f)); c.drawRect(0f, -Wn.height(), Wn.width(), 0f, p)
-            p.shader = LinearGradient(0f, -Wn.height(), Wn.width(), 0f,
-                intArrayOf(0, 0, Color.WHITE.a(0.1f + doorT * 0.12f), 0), floatArrayOf(0f, 0.42f, 0.5f, 0.62f), Shader.TileMode.CLAMP)
-            c.drawRect(0f, -Wn.height(), Wn.width(), 0f, p); p.shader = null
-            c.restore()
-        }
+        fill(0x6B101822); c.drawRect(L, p)
+        p.shader = LinearGradient(L.left, 0f, L.right, 0f, intArrayOf(0, Color.WHITE.a(0.18f), 0), floatArrayOf(0f, 0.22f, 0.34f), Shader.TileMode.CLAMP); c.drawRect(L, p)
+        p.shader = RadialGradient(L.centerX(), L.centerY(), L.height() * 0.6f, intArrayOf(0, Color.BLACK.a(0.45f)), floatArrayOf(0.3f, 1f), Shader.TileMode.CLAMP); c.drawRect(L, p)
+        p.shader = null
         c.restore()
-        if (!open) { s.strokeWidth = dp(0.6f); s.color = 0x59FFFFFF; r.set(Wn.left - dp(4f), Wn.top - dp(4f), Wn.right + dp(4f), Wn.bottom + dp(4f)); c.drawRoundRect(r, dp(14f), dp(14f), s) }
+    }
 
-        // keys strip and keys
-        val k0 = G.keys[0]; val kN = G.keys[3]
-        if (G.tall) r.set(k0.x - k0.r * 1.6f, k0.y - k0.r * 1.45f, kN.x + k0.r * 1.6f, k0.y + k0.r * 1.45f)
-        else r.set(k0.x - k0.r * 1.45f, k0.y - k0.r * 1.6f, k0.x + k0.r * 1.45f, kN.y + k0.r * 1.6f)
-        p.shader = LinearGradient(r.left, r.top, r.right, r.bottom, 0xFF6F7680.toInt(), 0xFF8C939C.toInt(), Shader.TileMode.CLAMP)
-        c.drawRoundRect(r, k0.r * 1.45f, k0.r * 1.45f, p); p.shader = null
-        s.strokeWidth = 1f; s.color = 0x40000000; c.drawRoundRect(r, k0.r * 1.45f, k0.r * 1.45f, s)
-        val m = Deck.mode
-        for (K in G.keys) {
-            val latched = when (K.key) {
-                Deck.Key.PLAY -> m == Deck.Mode.PLAY
-                Deck.Key.FF -> m == Deck.Mode.FF || (m == Deck.Mode.AMS && Deck.v * Deck.dir > 0)
-                Deck.Key.REW -> m == Deck.Mode.REW || (m == Deck.Mode.AMS && Deck.v * Deck.dir < 0)
-                Deck.Key.STOP -> false
-            }
-            val tap = if (pressed == K.key) max(0f, 1 - pressAge / 160f) else 0f
-            key(c, K, max(if (latched) 0.6f else 0f, tap))
+    /** A knurled wheel standing proud of the body edge; its ribs move with the volume. */
+    private fun wheel(c: Canvas, Wl: RectF, volume: Float) {
+        val rad = Wl.width() * 0.45f
+        p.shader = LinearGradient(Wl.left, 0f, Wl.right, 0f, intArrayOf(0xFF5F666E.toInt(), 0xFFC9CED3.toInt(), 0xFF4A5057.toInt()), null, Shader.TileMode.CLAMP)
+        c.drawRoundRect(Wl, rad, rad, p); p.shader = null
+        c.save(); path.reset(); path.addRoundRect(Wl, rad, rad, Path.Direction.CW); c.clipPath(path)
+        val step = Wl.height() / 18; val off = (volume * Wl.height() * 1.6f) % step
+        s.strokeWidth = dp(0.6f); s.color = Color.BLACK.a(0.35f)
+        var yy = Wl.top - step + off
+        while (yy < Wl.bottom + step) {
+            val tt = ((yy - Wl.top) / Wl.height()).coerceIn(0f, 1f)
+            val y2 = Wl.top + Wl.height() * (0.5f - 0.5f * cos(tt * PI).toFloat())
+            c.drawLine(Wl.left, y2, Wl.right, y2, s); yy += step
         }
-        val P = G.keys.first { it.key == Deck.Key.PLAY }
-        val on = m == Deck.Mode.PLAY
-        val lx = if (G.tall) P.x else P.x - P.r * 1.22f
-        val ly = if (G.tall) P.y - P.r * 1.22f else P.y
-        if (on) { p.shader = RadialGradient(lx, ly, P.r * 0.6f, 0x8CFFAD33.toInt(), 0x00FFAD33, Shader.TileMode.CLAMP); c.drawCircle(lx, ly, P.r * 0.6f, p); p.shader = null }
-        fill(if (on) 0xFFFFAD33.toInt() else 0xFF4E4438.toInt()); c.drawCircle(lx, ly, max(dp(1.6f), P.r * 0.08f), p)
+        p.shader = LinearGradient(0f, Wl.top, 0f, Wl.bottom, intArrayOf(Color.BLACK.a(0.5f), 0, 0, Color.BLACK.a(0.5f)), floatArrayOf(0f, 0.3f, 0.7f, 1f), Shader.TileMode.CLAMP)
+        c.drawRect(Wl, p); p.shader = null
+        c.restore()
+    }
 
-        // wordmark and the printed switches
-        val Lg = G.leg
-        val wm = if (G.narrow) min(Lg.width() * 0.085f, dp(26f)) else min(dp(30f), Lg.height() * 0.34f)
-        val wy = if (G.narrow) Lg.top + Lg.height() * 0.62f else Lg.top + Lg.height() * 0.36f
-        print(c, "NASTRO", Lg.left + dp(1f), wy + dp(1f), wm, 0x59 shl 24 or 0x1E324B, true, Paint.Align.LEFT, wm * 0.32f)
-        print(c, "NASTRO", Lg.left, wy, wm, 0xBFFFFFFF.toInt(), true, Paint.Align.LEFT, wm * 0.32f)
+    private fun strip(c: Canvas, G: PlayerGeom, F: Finish, detail: Float, live: Live) {
+        val Hd = G.hold ?: return
+        // HOLD: a real slide; orange shows in the slot when it is on, as on the real thing
+        recess(c, Hd, Hd.height() / 2, 0x99141820.toInt())
+        val kw = Hd.width() * 0.44f
+        val kx = Hd.left + if (Deck.hold) Hd.width() * 0.52f else Hd.width() * 0.04f
+        if (Deck.hold) { fill(0xFFFF8A1F.toInt()); r.set(Hd.left + Hd.width() * 0.08f, Hd.top + Hd.height() * 0.3f, Hd.left + Hd.width() * 0.48f, Hd.top + Hd.height() * 0.7f); c.drawRoundRect(r, Hd.height() * 0.2f, Hd.height() * 0.2f, p) }
+        r.set(kx, Hd.top + Hd.height() * 0.08f, kx + kw, Hd.top + Hd.height() * 0.92f)
+        p.shader = LinearGradient(0f, Hd.top, 0f, Hd.bottom, F.key[0], F.key[1], Shader.TileMode.CLAMP)
+        p.setShadowLayer(dp(2f), 0f, dp(0.6f), 0x66000000); c.drawRoundRect(r, Hd.height() * 0.42f, Hd.height() * 0.42f, p); p.clearShadowLayer(); p.shader = null
+        fill(Color.BLACK.a(0.25f)); for (i in 0 until 3) c.drawRect(kx + kw * (0.32f + i * 0.16f), Hd.top + Hd.height() * 0.28f, kx + kw * (0.32f + i * 0.16f) + dp(0.6f), Hd.top + Hd.height() * 0.72f, p)
+        val fs = max(dp(9f), G.w * 0.032f)
+        engrave(c, "HOLD", Hd.centerX(), Hd.bottom + fs * 1.25f, fs, F, Paint.Align.CENTER, 0.24f)
+        // printed switches: they wake as the finger nears
         for (T in G.legends) {
-            val onT = when (T.id) { "autoRev" -> Deck.autoRev; "megaBass" -> Deck.megaBass; else -> Deck.hold }
-            val prox = proximity[T.id] ?: 0f
-            val a = (0.62f + 0.38f * max(prox, if (onT) 1f else 0f)) * max(0.15f, detail)
-            val size = if (G.narrow) max(dp(10f), min(dp(12.5f), T.h * 0.62f)) else max(dp(11f), min(dp(14f), Lg.height() * 0.17f))
-            val dot = dp(3f)
-            print(c, T.text, T.x + dot * 4, T.y + dp(1f), size, 0xFF1C2E46.toInt().a(a * 0.35f), true, Paint.Align.LEFT, size * 0.14f)
-            print(c, T.text, T.x + dot * 4, T.y, size, Color.WHITE.a(a), true, Paint.Align.LEFT, size * 0.14f)
-            fill(if (onT) 0xFFFFAD33.toInt() else 0x73283C55); c.drawCircle(T.x + dot * 1.3f, T.y - size * 0.32f, dot, p)
+            val onT = if (T.id == "megaBass") Deck.megaBass else Deck.autoRev
+            val prox = live.proximity[T.id] ?: 0f
+            val a = (0.62f + 0.38f * max(prox, if (onT) 1f else 0f)) * max(0.2f, detail)
+            c.saveLayerAlpha(T.x, T.y - fs * 1.4f, T.x + T.w + fs * 6, T.y + fs * 0.6f, (a * 255).toInt())
+            engrave(c, T.text, T.x + fs * 1.1f, T.y, fs, F, Paint.Align.LEFT, 0.2f)
+            c.restore()
+            fill(if (onT) 0xFFFFAD33.toInt() else 0x661E2837); c.drawCircle(T.x + fs * 0.35f, T.y - fs * 0.32f, max(dp(2f), fs * 0.24f), p)
         }
+        // the battery door: the settings live behind it
+        val B = G.battery ?: return
+        s.strokeWidth = dp(0.9f); s.color = Color.BLACK.a(0.35f); c.drawRoundRect(B, B.height() * 0.18f, B.height() * 0.18f, s)
+        s.strokeWidth = dp(0.6f); s.color = Color.WHITE.a(0.45f); r.set(B.left + dp(0.6f), B.top + dp(0.6f), B.right - dp(0.6f), B.bottom - dp(0.6f)); c.drawRoundRect(r, B.height() * 0.18f, B.height() * 0.18f, s)
+        for (i in 0 until 5) {
+            val yy = B.top + B.height() * (0.2f + i * 0.09f)
+            fill(Color.BLACK.a(0.22f)); c.drawRect(B.left + B.width() * 0.18f, yy, B.right - B.width() * 0.18f, yy + dp(0.8f), p)
+            fill(Color.WHITE.a(0.35f)); c.drawRect(B.left + B.width() * 0.18f, yy + dp(0.8f), B.right - B.width() * 0.18f, yy + dp(1.3f), p)
+        }
+        engrave(c, "1.5V AA", B.centerX(), B.top + B.height() * 0.86f, fs * 0.82f, F, Paint.Align.CENTER, 0.12f)
     }
 
-    private fun easeOut(v: Float): Float { val q = 1 - v.coerceIn(0f, 1f); return 1 - q * q * q }
-
-    private fun key(c: Canvas, K: DeckGeom.Key, depth: Float) {
-        val x = K.x; val y = K.y; val rad = K.r
-        c.save(); c.translate(0f, depth * dp(1.6f))
-        p.shader = RadialGradient(x - rad * 0.35f, y - rad * 0.4f, rad * 1.3f,
-            if (depth > 0.3f) 0xFFC3C8CE.toInt() else 0xFFD9DDE2.toInt(), if (depth > 0.3f) 0xFF7E858D.toInt() else 0xFF8E959D.toInt(), Shader.TileMode.CLAMP)
-        p.setShadowLayer(dp(8f) * (1 - depth * 0.8f), 0f, dp(3f) * (1 - depth), 0x73000000)
-        c.drawCircle(x, y, rad, p); p.clearShadowLayer(); p.shader = null
-        s.strokeWidth = dp(1f); s.color = 0x8CFFFFFF.toInt(); r.set(x - rad + 0.5f, y - rad + 0.5f, x + rad - 0.5f, y + rad - 0.5f)
-        c.drawArc(r, 189f, 126f, false, s)
-        fill(0xFF33383F.toInt())
-        val q = rad * 0.36f
-        path.reset()
-        when (K.key) {
-            Deck.Key.PLAY -> { path.moveTo(x - q * 0.7f, y - q); path.lineTo(x + q, y); path.lineTo(x - q * 0.7f, y + q); path.close() }
-            Deck.Key.STOP -> path.addRect(x - q * 0.75f, y - q * 0.75f, x + q * 0.75f, y + q * 0.75f, Path.Direction.CW)
-            Deck.Key.FF -> { path.moveTo(x - q, y - q * 0.8f); path.lineTo(x, y); path.lineTo(x - q, y + q * 0.8f); path.close(); path.moveTo(x, y - q * 0.8f); path.lineTo(x + q, y); path.lineTo(x, y + q * 0.8f); path.close() }
-            Deck.Key.REW -> { path.moveTo(x + q, y - q * 0.8f); path.lineTo(x, y); path.lineTo(x + q, y + q * 0.8f); path.close(); path.moveTo(x, y - q * 0.8f); path.lineTo(x - q, y); path.lineTo(x, y + q * 0.8f); path.close() }
+    // ---- the open compartment: the tape in all its glory --------------------------------------------
+    fun bay(c: Canvas, G: PlayerGeom, live: Live) {
+        val F = finish()
+        val detail = 1 - Deck.conc
+        val body = RectF(G.x, G.y, G.x + G.w, G.y + G.h)
+        val R = G.radius
+        fill(F.stops[2]); p.setShadowLayer(dp(20f), 0f, dp(9f), 0x99000000.toInt()); c.drawRoundRect(body, R, R, p); p.clearShadowLayer()
+        metal(c, body, R, F.stops, false)
+        bevel(c, body, R)
+        lcd(c, G.lcd, detail, live)
+        val C = G.comp ?: return
+        val cr = G.w * 0.05f
+        c.save(); path.reset(); path.addRoundRect(C, cr, cr, Path.Direction.CW); c.clipPath(path)
+        p.shader = LinearGradient(C.left, C.top, C.right, C.bottom, 0xFF3B434D.toInt(), 0xFF1E242B.toInt(), Shader.TileMode.CLAMP); c.drawRect(C, p); p.shader = null
+        s.strokeWidth = dp(0.5f); s.color = 0x0DFFFFFF
+        var yy = C.top + dp(6f); while (yy < C.bottom) { c.drawLine(C.left + dp(6f), yy, C.right - dp(6f), yy, s); yy += dp(5f) }
+        p.shader = LinearGradient(0f, C.top, 0f, C.top + dp(22f), Color.BLACK.a(0.6f), 0, Shader.TileMode.CLAMP); c.drawRect(C.left, C.top, C.right, C.top + dp(22f), p)
+        p.shader = LinearGradient(C.left, 0f, C.left + dp(18f), 0f, Color.BLACK.a(0.5f), 0, Shader.TileMode.CLAMP); c.drawRect(C.left, C.top, C.left + dp(18f), C.bottom, p)
+        p.shader = null
+        c.save(); c.translate(G.tx + 2 * G.k, G.ty); c.rotate(-90f); c.scale(G.k, G.k); mechanism(c); c.restore()
+        val tape = Deck.tape
+        if (tape != null) {
+            c.save(); c.translate(G.tx, G.ty)
+            val fl = if (Deck.flipping) cos(Deck.flip * PI).toFloat() else 1f
+            c.rotate(-90f); c.scale(G.k, G.k * max(0.02f, kotlin.math.abs(fl)))
+            val facing = if (Deck.flipping && Deck.flip > 0.5f) (if (Deck.facing == 'A') 'B' else 'A') else Deck.facing
+            cassette(c, tape, true, detail, facing, spindle = true, shadow = 4f)
+            c.restore()
         }
-        c.drawPath(path, p)
-        // tactile dot on play, for finding it blind
-        if (K.key == Deck.Key.PLAY) { fill(0xFFF2F4F6.toInt()); c.drawCircle(x, y + rad * 0.68f, max(dp(1.6f), rad * 0.07f), p) }
         c.restore()
-    }
-
-    private fun lcdPanel(c: Canvas, L: RectF, detail: Float) {
-        fill(0xFF5D6B78.toInt()); c.drawRoundRect(L, dp(8f), dp(8f), p)
-        r.set(L.left + dp(3f), L.top + dp(3f), L.right - dp(3f), L.bottom - dp(3f))
-        p.shader = LinearGradient(0f, L.top, 0f, L.bottom, 0xFFA9B59A.toInt(), 0xFF94A185.toInt(), Shader.TileMode.CLAMP)
-        c.drawRoundRect(r, dp(6f), dp(6f), p); p.shader = null
-        val on = 0xFF1D2318.toInt(); val off = 0x141D2318
-        val rowH = L.height() * 0.64f
-        val dh = rowH * 0.7f; val dw = dh * 0.52f; val dy = L.top + rowH * 0.18f
-        // side and direction
-        print(c, Deck.sideLetter.toString(), L.left + L.width() * 0.05f, dy + dh * 0.92f, dh * 0.95f, on, true)
-        val ax = L.left + L.width() * 0.05f + dh * 0.62f; val ay = dy + dh * 0.5f
-        path.reset()
-        if (Deck.dir > 0) { path.moveTo(ax, ay - dh * 0.18f); path.lineTo(ax + dh * 0.3f, ay); path.lineTo(ax, ay + dh * 0.18f) }
-        else { path.moveTo(ax + dh * 0.3f, ay - dh * 0.18f); path.lineTo(ax, ay); path.lineTo(ax + dh * 0.3f, ay + dh * 0.18f) }
-        path.close()
-        val running = Deck.mode == Deck.Mode.PLAY || Deck.mode == Deck.Mode.AMS
-        fill(if (running) on else off); c.drawPath(path, p)
-        val cnt = Deck.counter().toString().padStart(3, '0')
-        val cx0 = L.left + L.width() * 0.27f
-        for (i in 0 until 3) seg7(c, cnt[i], cx0 + i * dw * 1.32f, dy, dw, dh, on, off)
-        // track and time on the right; the title runs along the bottom row and falls away at speed
-        val cur = Deck.current()
-        val fs = max(dp(11f), rowH * 0.24f)
-        fun mm(sec: Double) = "${(sec / 60).toInt()}:${(sec % 60).toInt().toString().padStart(2, '0')}"
-        val n = cur.track?.number ?: 0
-        print(c, if (L.width() < dp(280f) * 1.6f) n.toString().padStart(2, '0') else "TRACK ${n.toString().padStart(2, '0')}",
-            L.right - L.width() * 0.05f, L.top + rowH * 0.48f, fs, on, true, Paint.Align.RIGHT)
-        print(c, "${mm(max(0.0, cur.into))} / ${mm(cur.track?.durSecs ?: 0.0)}", L.right - L.width() * 0.05f, L.top + rowH * 0.86f, fs, on.a(detail), true, Paint.Align.RIGHT)
-        val ix = cx0 + 3 * dw * 1.32f + dw * 0.25f
-        if (Deck.megaBass) print(c, "MB", ix, L.top + rowH * 0.48f, fs, on.a(detail), true)
-        if (Deck.autoRev) print(c, "⇄", ix, L.top + rowH * 0.86f, fs, on.a(detail), true)
-        val title = cur.track?.title ?: ""
-        c.save(); r.set(L.left + dp(8f), L.top + rowH, L.right - dp(8f), L.bottom - dp(4f)); c.clipRect(r)
-        print(c, title.uppercase(), L.left + L.width() * 0.05f, L.bottom - L.height() * 0.11f, L.height() * 0.17f, on.a(detail * 0.9f), false, Paint.Align.LEFT, L.height() * 0.01f)
-        c.restore()
+        s.strokeWidth = dp(1.2f); s.color = Color.WHITE.a(0.55f); r.set(C.left - dp(0.6f), C.top - dp(0.6f), C.right + dp(0.6f), C.bottom + dp(0.6f)); c.drawRoundRect(r, cr, cr, s)
+        keys(c, G, F, live)
     }
 
     private val SEG = mapOf('0' to "abcdef", '1' to "bc", '2' to "abged", '3' to "abgcd", '4' to "fgbc", '5' to "afgcd",
