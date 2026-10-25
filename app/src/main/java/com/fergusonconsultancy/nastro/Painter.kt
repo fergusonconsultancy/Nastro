@@ -72,7 +72,7 @@ class PlayerGeom private constructor(val kind: Kind, val x: Float, val w: Float)
             val lcx = ld.centerX(); val lcy = ld.top + ld.height() * 0.45f
             val ln = RectF(lcx - 15 * k, lcy - 37 * k, lcx + 15 * k, lcy + 37 * k)
             lens = ln
-            tx = lcx - REEL_Y * k; ty = lcy
+            tx = lcx + REEL_Y * k; ty = lcy
             win = RectF(ln)
             chan = RectF(x + 0.055f * w, ld.bottom + 0.06f * w, x + 0.945f * w, ld.bottom + 0.28f * w)
             keys = keyRow(chan)
@@ -96,7 +96,8 @@ class PlayerGeom private constructor(val kind: Kind, val x: Float, val w: Float)
             val c = RectF(x + 0.035f * w, lcd.bottom + 0.045f * w, x + 0.965f * w, chan.top - 0.045f * w)
             comp = c
             k = minOf((c.width() - 0.07f * w) / CH, (c.height() - 0.06f * w) / (CW + 10))
-            tx = c.centerX() - 4 * k; ty = c.centerY()
+            // the tape's open edge and the heads face the hinge (the crease), as in a real player
+            tx = c.centerX() + 4 * k; ty = c.centerY()
             win = RectF(c)
         }
 
@@ -801,7 +802,7 @@ class Painter(ctx: Context) {
         if (tape != null && !lifting) {
             c.save(); c.translate(G.tx, G.ty)
             val fl = if (Deck.flipping) cos(Deck.flip * PI).toFloat() else 1f
-            c.rotate(-90f); c.scale(G.k, G.k * max(0.02f, kotlin.math.abs(fl)))
+            c.rotate(90f); c.scale(G.k, G.k * max(0.02f, kotlin.math.abs(fl)))
             val facing = if (Deck.flipping && Deck.flip > 0.5f) (if (Deck.facing == 'A') 'B' else 'A') else Deck.facing
             cassette(c, tape, true, detail, facing)
             c.restore()
@@ -886,12 +887,12 @@ class Painter(ctx: Context) {
         p.shader = LinearGradient(0f, C.top, 0f, C.top + dp(22f), Color.BLACK.a(0.6f), 0, Shader.TileMode.CLAMP); c.drawRect(C.left, C.top, C.right, C.top + dp(22f), p)
         p.shader = LinearGradient(C.left, 0f, C.left + dp(18f), 0f, Color.BLACK.a(0.5f), 0, Shader.TileMode.CLAMP); c.drawRect(C.left, C.top, C.left + dp(18f), C.bottom, p)
         p.shader = null
-        c.save(); c.translate(G.tx + 2 * G.k, G.ty); c.rotate(-90f); c.scale(G.k, G.k); mechanism(c); c.restore()
+        c.save(); c.translate(G.tx - 2 * G.k, G.ty); c.rotate(90f); c.scale(G.k, G.k); mechanism(c); c.restore()
         val tape = Deck.tape
         if (tape != null) {
             c.save(); c.translate(G.tx, G.ty)
             val fl = if (Deck.flipping) cos(Deck.flip * PI).toFloat() else 1f
-            c.rotate(-90f); c.scale(G.k, G.k * max(0.02f, kotlin.math.abs(fl)))
+            c.rotate(90f); c.scale(G.k, G.k * max(0.02f, kotlin.math.abs(fl)))
             val facing = if (Deck.flipping && Deck.flip > 0.5f) (if (Deck.facing == 'A') 'B' else 'A') else Deck.facing
             cassette(c, tape, true, detail, facing, spindle = true, shadow = 4f)
             c.restore()

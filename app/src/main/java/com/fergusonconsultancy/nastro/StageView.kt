@@ -261,7 +261,7 @@ class StageView(ctx: Context) : View(ctx) {
                 val k0 = sl.rect.width() / (PlayerGeom.CW + 4); val k1 = G.k
                 c.save()
                 c.translate(lerp(fx, G.tx, tt), lerp(fy, G.ty, tt) - sin(tt * PI).toFloat() * dp(30f))
-                c.rotate(-90f * tt)
+                c.rotate(90f * tt)
                 val kk = lerp(k0, k1, tt) * (1 + sin(tt * PI).toFloat() * 0.06f)
                 c.scale(kk, kk)
                 painter.cassette(c, pend, false, 1f, shadow = 6f)
@@ -351,9 +351,9 @@ class StageView(ctx: Context) : View(ctx) {
     private var wheelFrom: Pair<Float, Float>? = null           // y, volume
 
     private fun hub(G: PlayerGeom, left: Boolean): Pair<Float, Float> {
-        // shell (sx, sy) after rotate(-90°): screen = (sy, -sx) × k
+        // shell (sx, sy) after rotate(+90°): screen = (-sy, sx) × k; the tape's open edge faces the hinge
         val sx = if (left) -21.25f else 21.25f
-        return Pair(G.tx + (-2f) * G.k, G.ty - sx * G.k)
+        return Pair(G.tx - (-2f) * G.k, G.ty + sx * G.k)
     }
 
     private fun RectF.near(x: Float, y: Float, pad: Float) = x > left - pad && x < right + pad && y > top - pad && y < bottom + pad
