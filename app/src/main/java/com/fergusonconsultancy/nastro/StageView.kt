@@ -87,7 +87,7 @@ class StageView(ctx: Context) : View(ctx) {
         invalidate()
     }
 
-    fun libraryChanged() { layoutShelf(); invalidate() }
+    fun libraryChanged() { slots = emptyList(); letters = emptyList(); layoutShelf(); invalidate() }
 
     /** Back on the folded screen with the shelf showing: return to the face. */
     fun back(): Boolean {
@@ -131,9 +131,11 @@ class StageView(ctx: Context) : View(ctx) {
 
     private fun layoutShelf() {
         val tapes = Library.tapes
-        val cols = if (shelfArea.width() > dp(340f)) 2 else 1
+        cols = if (shelfArea.width() > dp(340f)) 2 else 1
+        // room on the hinge side for the index
         val gap = max(dp(10f), shelfArea.width() * 0.035f)
-        val cw = (shelfArea.width() - gap * (cols + 1)) / cols
+        rail.set(shelfArea.right - dp(30f), shelfArea.top + dp(24f), shelfArea.right - dp(2f), shelfArea.bottom - dp(24f))
+        val cw = (shelfArea.width() - dp(22f) - gap * (cols + 1)) / cols
         val ch = cw * DeckGeom.CH / DeckGeom.CW
         val head = dp(70f)
         // Updated in place each frame; rebuilt only when the library changes
@@ -144,11 +146,54 @@ class StageView(ctx: Context) : View(ctx) {
             val y0 = shelfArea.top + head + (i / cols) * (ch + gap) - shelfScroll
             sl.rect.set(x0, y0, x0 + cw, y0 + ch)
         }
+        rowH = ch + gap
         shelfContent = head + ((tapes.size + cols - 1) / cols) * (ch + gap) + gap
+        if (letters.isEmpty() && tapes.isNotEmpty()) buildIndex()
         if (lean.size != tapes.size) { lean = FloatArray(tapes.size); leanV = FloatArray(tapes.size) }
     }
 
     private fun maxScroll() = max(0f, shelfContent - shelfArea.height())
+
+    // ---- the index in the door's trim ---------------------------------------------------------
+    private var letters: List<Char> = emptyList()
+    private var firstOf: Map<Char, Int> = emptyMap()
+    private var indexing = false
+    private var indexLetter: Char? = null
+    private var railWake = 0f
+    private var railTouchedAt = 0L
+    private var cols = 1
+    private var rowH = 0f
+    private val rail = RectF()
+
+    private fun buildIndex() {
+        val map = LinkedHashMap<Char, Int>()
+        Library.tapes.forEachIndexed { i, t -> if (t.indexLetter !in map) map[t.indexLetter] = i }
+        firstOf = map; letters = map.keys.toList()
+    }
+
+    private fun railZone(x: Float, y: Float) = x > shelfArea.right - dp(40f) && x <= shelfArea.right + dp(8f) && y > shelfArea.top && y < shelfArea.bottom
+
+    private fun indexAt(y: Float) {
+        if (letters.isEmpty()) return
+        val i = (((y - rail.top) / rail.height()) * letters.size).toInt().coerceIn(0, letters.size - 1)
+        val ch = letters[i]
+        if (ch != indexLetter) {
+            indexLetter = ch
+            performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            val first = firstOf[ch] ?: 0
+            scroller.forceFinished(true)
+            shelfScroll = ((first / cols) * rowH).coerceIn(0f, maxScroll())
+        }
+        railTouchedAt = SystemClock.uptimeMillis()
+    }
+
+    private fun drawIndex(c: Canvas, now: Long) {
+        val target = if (indexing || now - railTouchedAt < 1200) 1f else 0f
+        railWake += (target - railWake) * 0.25f
+        if (railWake < 0.01f) return
+        painter.indexRail(c, rail, letters, railWake, indexLetter)
+        if (indexing) indexLetter?.let { painter.bigLetter(c, shelfArea, it, railWake) }
+    }
 
     // ---- drawing -------------------------------------------------------------------------------
     override fun onDraw(c: Canvas) {
@@ -182,11 +227,13 @@ class StageView(ctx: Context) : View(ctx) {
         val lifting = Deck.pending != null && Deck.tape !== Deck.pending
         if (open) {
             if (swing >= 0.999f) {
-                painter.shelf(c, shelfArea, slots, lean, true, true, Library.tapes.size)
+                painter.shelf(c, shelfArea, slots, lean, true, true, Library.tapes.size, shelfScroll)
+                drawIndex(c, now)
                 painter.deck(c, G, true, now, pressed, now - pressedAt, proximity, lifting)
             } else drawSwing(c, G, now, lifting)
         } else {
-            painter.shelf(c, shelfArea, slots, lean, true, false, Library.tapes.size)
+            painter.shelf(c, shelfArea, slots, lean, true, false, Library.tapes.size, shelfScroll)
+            drawIndex(c, now)
             painter.deck(c, G, false, now, pressed, now - pressedAt, proximity, lifting)
         }
         // the tape in flight from the shelf
@@ -215,7 +262,7 @@ class StageView(ctx: Context) : View(ctx) {
         }
 
         val busy = Deck.animating() || Deck.mode == Deck.Mode.PLAY || swing < 1f || shake > 0 || abs(view - viewTarget) > 0.001f ||
-            !scroller.isFinished || lean.any { abs(it) > 0.05f } || proximity.values.any { it > 0.02f } || (pressed != null && now - pressedAt < 200)
+            !scroller.isFinished || railWake > 0.01f || lean.any { abs(it) > 0.05f } || proximity.values.any { it > 0.02f } || (pressed != null && now - pressedAt < 200)
         if (busy) postInvalidateOnAnimation()
     }
 
@@ -235,7 +282,7 @@ class StageView(ctx: Context) : View(ctx) {
             shade.color = Color.BLACK.a(0.5f * (1 - cs)); c.drawRect(cx, 0f, width.toFloat(), height.toFloat(), shade)
         } else {
             // the inside of the door coming down onto the left half
-            painter.shelf(c, shelfArea, slots, lean, true, true, Library.tapes.size)
+            painter.shelf(c, shelfArea, slots, lean, true, true, Library.tapes.size, shelfScroll)
             shade.color = Color.BLACK.a(0.5f * (1 + cs)); c.drawRect(0f, 0f, cx, height.toFloat(), shade)
         }
         c.restore()
@@ -294,6 +341,10 @@ class StageView(ctx: Context) : View(ctx) {
                     }
                     swipeFrom = x to y; return true
                 }
+                if (railZone(x, y) && (open || view > 0.5f) && letters.size > 1) {
+                    indexing = true; parent?.requestDisallowInterceptTouchEvent(true)
+                    indexAt(y); invalidate(); return true
+                }
                 if (shelfArea.contains(x, y) && (open || view > 0.5f)) {
                     shelfFrom = Triple(y, shelfScroll, 0f)
                     vt?.recycle(); vt = VelocityTracker.obtain().also { it.addMovement(e) }
@@ -303,6 +354,7 @@ class StageView(ctx: Context) : View(ctx) {
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
+                if (indexing) { indexAt(y); invalidate(); return true }
                 wakeLegends(G, x, y)
                 wind?.let { (hx, hy, a0) ->
                     val a = atan2(y - hy, x - hx)
@@ -322,6 +374,7 @@ class StageView(ctx: Context) : View(ctx) {
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (indexing) { indexing = false; railTouchedAt = SystemClock.uptimeMillis(); invalidate(); return true }
                 if (wind != null) { wind = null; Deck.dragging = false; if (wasPlaying) Deck.press(Deck.Key.PLAY) }
                 swipeFrom?.let { (x0, y0) ->
                     val dx = x - x0; val dy = y - y0
@@ -349,7 +402,6 @@ class StageView(ctx: Context) : View(ctx) {
     private fun pick(sl: Painter.Slot) {
         val i = sl.index
         // Membrane: the tapes either side lean into the gap it leaves, nearest most
-        val cols = if (shelfArea.width() > dp(340f)) 2 else 1
         for (j in lean.indices) {
             val d = (j - i) / cols
             if (j != i && (j - i) % cols == 0 && d != 0) leanV[j] += -kotlin.math.sign(d.toFloat()) * dp(9f) / abs(d).toFloat().pow(1f)

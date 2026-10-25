@@ -28,11 +28,17 @@ class Tape(
     val sideSecs: Double,
     val length: Int,
     val shell: Shell,
+    /** Whose cover goes on the J-card: the album itself, or the newest single on a singles tape. */
+    val artId: Long = albumId,
+    val singles: Boolean = false,
 ) {
+    /** Shelf order and the index letter: artist, ignoring a leading "The". */
+    val sortKey: String = artist.lowercase().removePrefix("the ").trim()
+    val indexLetter: Char = sortKey.firstOrNull()?.uppercaseChar()?.takeIf { it in 'A'..'Z' } ?: '#'
     val aEnd: Double = (a.lastOrNull()?.let { it.start + it.durSecs } ?: 0.0) / sideSecs
     val bEnd: Double = (b.lastOrNull()?.let { it.start + it.durSecs } ?: 0.0) / sideSecs
     val label: String = if (artist.isBlank() || artist == "<unknown>") album else "$artist – $album"
-    val artUri: Uri get() = ContentUris.withAppendedId(MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI, albumId)
+    val artUri: Uri get() = ContentUris.withAppendedId(MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI, artId)
     var art: Bitmap? = null
 
     /** J-card colours for when the album has no artwork: taken from the shell so they belong together. */
@@ -44,7 +50,8 @@ class Tape(
             0xFFD97A2B.toInt(), 0xFF1F4E5F.toInt(), 0xFFB23A48.toInt(), 0xFF3D3D6B.toInt(),
         )
 
-        fun build(albumId: Long, artist: String, album: String, raw: List<Triple<Long, String, Pair<Double, Int>>>): Tape? {
+        fun build(albumId: Long, artist: String, album: String, raw: List<Triple<Long, String, Pair<Double, Int>>>,
+                  artId: Long = albumId, singles: Boolean = false): Tape? {
             if (raw.isEmpty()) return null
             val durs = raw.map { it.third.first.coerceAtLeast(1.0) }
             val total = durs.sum()
@@ -73,7 +80,7 @@ class Tape(
                 else -> (Math.ceil(need / 900.0).toInt() * 30)
             }
             val shell = Shells.ALL[Math.floorMod(albumId * 31 + album.hashCode(), Shells.ALL.size.toLong()).toInt()]
-            return Tape(albumId, artist, album, sa, sb, length * 30.0, length, shell)
+            return Tape(albumId, artist, album, sa, sb, length * 30.0, length, shell, artId, singles)
         }
     }
 }
@@ -125,15 +132,30 @@ object Library {
             }
         }
         val out = ArrayList<Tape>()
+        fun artistOf(first: Array<Any?>) = (first[6] as String?)?.takeIf { it.isNotBlank() && it != "<unknown>" } ?: first[5] as String
+        fun raw(rows: List<Array<Any?>>) = rows.map { Triple(it[0] as Long, it[1] as String, Pair((it[2] as Long) / 1000.0, it[3] as Int)) }
+        // Singles (one or two tracks) by the same artist go onto one tape, the way they were taped off
+        // the radio; a lone single keeps its own.
+        val singlesBy = LinkedHashMap<String, MutableList<Pair<Long, MutableList<Array<Any?>>>>>()
         for ((albumId, rows) in byAlbum) {
             // TRACK is disc*1000 + track on many files; sorting by it keeps disc order too
             rows.sortWith(compareBy<Array<Any?>> { it[3] as Int }.thenBy { it[1] as String })
-            val first = rows.first()
-            val artist = (first[6] as String?)?.takeIf { it.isNotBlank() && it != "<unknown>" } ?: first[5] as String
-            val raw = rows.map { Triple(it[0] as Long, it[1] as String, Pair((it[2] as Long) / 1000.0, it[3] as Int)) }
-            Tape.build(albumId, artist, first[4] as String, raw)?.let { out += it }
+            if (rows.size <= 2) singlesBy.getOrPut(artistOf(rows.first()).lowercase()) { mutableListOf() } += albumId to rows
         }
-        out.sortWith(compareBy<Tape> { it.artist.lowercase().removePrefix("the ") }.thenBy { it.album.lowercase() })
+        val merged = HashSet<Long>()
+        for ((_, group) in singlesBy) {
+            if (group.size < 2) continue
+            val rows = group.flatMap { it.second }
+            val artist = artistOf(rows.first())
+            val id = -(1L + (artist.lowercase().hashCode().toLong() and 0x7FFFFFFF))
+            Tape.build(id, artist, "Singles", raw(rows), artId = group.maxOf { it.first }, singles = true)?.let { out += it }
+            group.forEach { merged += it.first }
+        }
+        for ((albumId, rows) in byAlbum) {
+            if (albumId in merged) continue
+            Tape.build(albumId, artistOf(rows.first()), rows.first()[4] as String, raw(rows))?.let { out += it }
+        }
+        out.sortWith(compareBy<Tape> { it.sortKey }.thenBy { it.singles }.thenBy { it.album.lowercase() })
         return out
     }
 }

@@ -503,9 +503,10 @@ class Painter(ctx: Context) {
         }
         val P = G.keys.first { it.key == Deck.Key.PLAY }
         val on = m == Deck.Mode.PLAY
-        val lx = P.x - P.r * 1.05f; val ly = P.y - P.r * 1.32f
+        val lx = if (G.tall) P.x else P.x - P.r * 1.22f
+        val ly = if (G.tall) P.y - P.r * 1.22f else P.y
         if (on) { p.shader = RadialGradient(lx, ly, P.r * 0.6f, 0x8CFFAD33.toInt(), 0x00FFAD33, Shader.TileMode.CLAMP); c.drawCircle(lx, ly, P.r * 0.6f, p); p.shader = null }
-        fill(if (on) 0xFFFFAD33.toInt() else 0xFF5A4A3A.toInt()); c.drawCircle(lx, ly, max(dp(2.2f), P.r * 0.09f), p)
+        fill(if (on) 0xFFFFAD33.toInt() else 0xFF4E4438.toInt()); c.drawCircle(lx, ly, max(dp(1.6f), P.r * 0.08f), p)
 
         // wordmark and the printed switches
         val Lg = G.leg
@@ -617,25 +618,51 @@ class Painter(ctx: Context) {
         s.strokeWidth = 1f; s.color = 0x09FFFFFF
         var yy = area.top + dp(14f); val step = dp(7f)
         while (yy < area.bottom) { c.drawLine(area.left, yy, area.right, yy, s); yy += step }
-        val kw = dp(8f); val kh = dp(44f)
-        val hx = if (hingeRight) area.right - kw - dp(6f) else area.left + dp(6f)
-        for (f in floatArrayOf(0.14f, 0.5f, 0.86f)) {
-            val ky = area.top + area.height() * f
-            p.shader = LinearGradient(hx, 0f, hx + kw, 0f, intArrayOf(0xFF7F8A96.toInt(), 0xFFD4DBE2.toInt(), 0xFF6C7783.toInt()), null, Shader.TileMode.CLAMP)
-            r.set(hx, ky - kh / 2, hx + kw, ky + kh / 2); c.drawRoundRect(r, kw / 2, kw / 2, p); p.shader = null
-        }
+        // The trim along the hinge edge: one moulded groove, where the index lives
+        val gx = if (hingeRight) area.right - dp(14f) else area.left + dp(14f)
+        s.strokeWidth = dp(1f); s.color = 0x33000000; c.drawLine(gx, area.top + dp(20f), gx, area.bottom - dp(20f), s)
+        s.color = 0x14FFFFFF; c.drawLine(gx + dp(1f), area.top + dp(20f), gx + dp(1f), area.bottom - dp(20f), s)
         c.restore()
     }
 
-    fun shelf(c: Canvas, area: RectF, slots: List<Slot>, lean: FloatArray, header: Boolean, onDoor: Boolean, count: Int) {
+    /**
+     * The index in the door's trim (Giulietta): letters only appear as the thumb reaches the edge,
+     * the one under it swelling, and blend back when the touch is broken.
+     */
+    fun indexRail(c: Canvas, rail: RectF, letters: List<Char>, wake: Float, current: Char?) {
+        if (wake < 0.01f || letters.isEmpty()) return
+        fill(0xFF0D1014.toInt().a(0.5f * wake)); c.drawRoundRect(rail, rail.width() / 2, rail.width() / 2, p)
+        val step = rail.height() / letters.size
+        val size = min(dp(13f), step * 0.86f)
+        for ((i, ch) in letters.withIndex()) {
+            val cy = rail.top + step * (i + 0.5f)
+            val on = ch == current
+            val sz = if (on) size * 1.9f else size
+            val cx = rail.centerX() - if (on) dp(26f) * wake else 0f
+            print(c, ch.toString(), cx, cy + sz * 0.35f, sz, (if (on) 0xFFFFAD33.toInt() else 0xFFDCE4EC.toInt()).a(wake), true, Paint.Align.CENTER)
+        }
+    }
+
+    /** While the index is held, the letter you are on, written large across the shelf. */
+    fun bigLetter(c: Canvas, area: RectF, ch: Char, a: Float) {
+        if (a < 0.01f) return
+        fill(0xFF0D1014.toInt().a(0.55f * a)); r.set(area.centerX() - dp(64f), area.centerY() - dp(64f), area.centerX() + dp(64f), area.centerY() + dp(64f))
+        c.drawRoundRect(r, dp(24f), dp(24f), p)
+        handwrite(c, ch.toString(), area.centerX(), area.centerY() + dp(30f), dp(96f), dp(200f), 0xFFF2EFE6.toInt().a(a), Paint.Align.CENTER)
+    }
+
+    fun shelf(c: Canvas, area: RectF, slots: List<Slot>, lean: FloatArray, header: Boolean, onDoor: Boolean, count: Int, scroll: Float = 0f) {
         val fade = 1 - Deck.conc * 0.75f
         if (onDoor) doorInside(c, area, true) else { fill(0xFF13171C.toInt()); c.drawRoundRect(area, dp(18f), dp(18f), p) }
         c.save(); path.reset(); path.addRoundRect(area, dp(18f), dp(18f), Path.Direction.CW); c.clipPath(path)
         if (header) {
+            // The heading scrolls away with the tapes rather than sliding under them
             val pad = dp(18f)
+            c.save(); c.translate(0f, -scroll)
             print(c, "THE SHELF", area.left + pad, area.top + dp(30f), dp(13f),
                 (if (onDoor) 0xFFB9C8D6.toInt() else 0xFF8D98A5.toInt()).a(fade), true, Paint.Align.LEFT, dp(13f) * 0.24f)
             handwrite(c, "$count ${if (count == 1) "tape" else "tapes"}", area.left + pad, area.top + dp(56f), dp(22f), area.width(), 0xFFC9D1D9.toInt().a(fade))
+            c.restore()
         }
         val inDeck = Deck.tape
         val pending = Deck.pending
