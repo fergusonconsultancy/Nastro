@@ -76,7 +76,7 @@ class SettingsSheet(ctx: Context, private val shelfChanged: () -> Unit) : FrameL
         panel.addView(head)
         panel.addView(text("settings", 21f, MUTED, hand).apply { setPadding(0, dp(4), 0, dp(12)) })
 
-        row("Finish", "Light blue and grey were the WM-EX610's own.", finishRow())
+        row("Finish", "Visconti, the Alfa green. Light blue and grey were the WM-EX610's own.", finishRow())
         row("Mechanism sounds", "Keys, door, tape seating, the motor winding.", choice(listOf("On" to true, "Off" to false), { Prefs.sounds }) { Prefs.sounds = it })
         row("Tape hiss", "A faint ferric hiss under the music.", choice(listOf("Off" to false, "Subtle" to true), { Prefs.hiss }) { Prefs.hiss = it })
         row("Fast wind", "Real is 30 times play speed, as on the machine.", choice(listOf("Real" to 30, "Quick" to 60), { Prefs.windX }) { Prefs.windX = it })
@@ -125,6 +125,7 @@ class SettingsSheet(ctx: Context, private val shelfChanged: () -> Unit) : FrameL
     private fun finishRow(): View {
         val box = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
         val swatches = linkedMapOf(
+            "visconti" to intArrayOf(0xFF0B6A39.toInt(), 0xFF000805.toInt()),
             "blue" to intArrayOf(0xFFBFD4E8.toInt(), 0xFF7593B3.toInt()), "grey" to intArrayOf(0xFFE2E5E9.toInt(), 0xFF979EA6.toInt()),
             "graphite" to intArrayOf(0xFF61676F.toInt(), 0xFF2A2E33.toInt()), "rosso" to intArrayOf(0xFFD2363E.toInt(), 0xFF6E0A12.toInt()),
         )

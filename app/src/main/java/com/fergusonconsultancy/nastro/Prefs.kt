@@ -25,8 +25,8 @@ object Prefs {
         e.apply(); changed()
     }
 
-    /** blue and grey were the WM-EX610's own; graphite and rosso are ours. */
-    var finish: String get() = s("finish", "blue"); set(v) = put("finish", v)
+    /** visconti (the default) is the Alfa green; blue and grey were the WM-EX610's own; graphite and rosso are ours. */
+    var finish: String get() = s("finish", "visconti"); set(v) = put("finish", v)
     var sounds: Boolean get() = b("sounds", true); set(v) = put("sounds", v)
     var hiss: Boolean get() = b("hiss", false); set(v) = put("hiss", v)
     /** Fast wind: 30 is the machine's own speed. */

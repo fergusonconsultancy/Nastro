@@ -77,3 +77,12 @@ Mechack's verdict on the folded screen: it looked low effort, and the app was "n
 - **Removed: "▲ OPEN"** (Mechack circled it). It pointed the wrong way and opened nothing; the door opens by unfolding. **Removed: the tactile dot on play**, by the same logic: a bump you cannot feel on glass is ornament.
 - **Convex, sunken keys** (Mechack, 25 Oct): domed caps, folded and unfolded alike since they are the same keys on the same body, sunk into the body as on the WM-EX610. Each sits in a deep round hole: the upper lip in shadow and shading the top of the cap, the lower lip catching the light, the wall dark above and lit below. A sunken key throws no shadow outwards, only a tight contact shadow on the floor, and less light reaches the dome. A latched key (play while the tape runs) sits lower and dimmer.
 - **The tape faces the hinge** (Mechack, 25 Oct): in portable players the heads sit by the door's hinge and the tape goes in open edge first towards them, so it drops onto the heads as the door closes (general knowledge, not confirmed for the EX610 specifically). The crease is the hinge, so the tape's open edge, the head, pinch roller and capstan now face the crease when unfolded, and the label runs down the far side. The lens on the folded face shows the tape the same way round.
+
+## Fourth review, 25 Oct: Visconti
+
+Mechack: the light blue, though his own Walkman's colour, lacked sleekness; apply Visconti green and make it slick.
+
+- **Visconti is the default finish**, using the green the Fold apps already use (an approximation of Alfa Romeo's Verde Visconti; Alfa publishes no value), so the portfolio stays one family.
+- **Lacquer, not brushed metal.** Visconti is paint, so this finish is clear-coated: deep colour near black-green at the edges, no brush lines, and one broad clear-coat reflection crossing body and lid as one light would (the mandate's rule: one highlight at a time). The brushed shoulder highlight is dropped on lacquer so there is never a second one.
+- **Champagne** (the mandate's #D9BB86) for the engraving, the keys' satin aluminium, the Hold slide and a fine coachline round the lid's seam, as on an Alfa.
+- The inside of the door turns dark green to match. Light blue, grey, graphite and rosso remain in settings.

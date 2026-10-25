@@ -428,12 +428,20 @@ class Painter(ctx: Context) {
         var lifting: Boolean = false, var volume: Float = 0.7f, var volAge: Long = 9999,
     )
 
-    /** Light blue and grey were the WM-EX610's own; graphite and rosso are ours. */
+    /**
+     * Visconti is the default: Alfa Romeo's green as the Fold apps use it (an approximation; Alfa
+     * publishes no value), as clear-coated lacquer with champagne engraving and keys. Light blue and
+     * grey were the WM-EX610's own; graphite and rosso are ours.
+     */
     class Finish(val stops: IntArray, val lid: IntArray, val key: IntArray, val ink: Int, val deep: Int, val chan: Int,
-                 val etchLight: Boolean = false, val sym: Int = 0xB81E242C.toInt())
+                 val etchLight: Boolean = false, val sym: Int = 0xB81E242C.toInt(), val lacquer: Boolean = false,
+                 val inside: IntArray = intArrayOf(0xFF45586C.toInt(), 0xFF2F3D4C.toInt()))
 
     private fun col(v: Number) = v.toInt()
     val finishes = linkedMapOf(
+        "visconti" to Finish(intArrayOf(col(0xFF0B6A39), col(0xFF033A21), col(0xFF000805)), intArrayOf(col(0xFF0D723E), col(0xFF033D22)),
+            intArrayOf(col(0xFFF1E6CD), col(0xFFB49A6A)), col(0xEBD9BB86), col(0x8C000000), col(0xFF03150D), true, col(0xD9463216), true,
+            intArrayOf(col(0xFF123A28), col(0xFF06180F))),
         "blue" to Finish(intArrayOf(col(0xFFBFD4E8), col(0xFF9FBAD4), col(0xFF7593B3)), intArrayOf(col(0xFFC8DBED), col(0xFFA5BFD8)),
             intArrayOf(col(0xFFD9DDE2), col(0xFF8E959D)), col(0xC7FFFFFF), col(0x7316283E), col(0xFF5B6F84)),
         "grey" to Finish(intArrayOf(col(0xFFE2E5E9), col(0xFFC2C7CD), col(0xFF979EA6)), intArrayOf(col(0xFFE9ECEF), col(0xFFC9CED4)),
@@ -443,7 +451,7 @@ class Painter(ctx: Context) {
         "rosso" to Finish(intArrayOf(col(0xFFD2363E), col(0xFFA8141E), col(0xFF6E0A12)), intArrayOf(col(0xFFDC4048), col(0xFFB01A24)),
             intArrayOf(col(0xFFE9E4DC), col(0xFFA49C90)), col(0xCCFFF4E8), col(0x80320006), col(0xFF5E0910), true),
     )
-    private fun finish() = finishes[Prefs.finish] ?: finishes.getValue("blue")
+    private fun finish() = finishes[Prefs.finish] ?: finishes.getValue("visconti")
 
     private var brushed: Bitmap? = null
     private fun brush(size: Int): Bitmap {
@@ -463,7 +471,16 @@ class Painter(ctx: Context) {
     }
 
     /** Brushed anodised metal: horizontal on the body, vertical on the lid so it reads as its own panel. */
-    private fun metal(c: Canvas, R: RectF, rad: Float, stops: IntArray, vertical: Boolean) {
+    private fun metal(c: Canvas, R: RectF, rad: Float, stops: IntArray, vertical: Boolean, lacquer: Boolean = false) {
+        if (lacquer) {
+            // clear-coated lacquer: deep colour darkening towards the edges, and one broad reflection
+            p.shader = RadialGradient(R.left + R.width() * 0.35f, R.top + R.height() * 0.3f, max(R.width(), R.height()) * 0.85f, stops, floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP)
+            c.drawRoundRect(R, rad, rad, p)
+            p.shader = LinearGradient(R.left, R.top, R.right, R.top + R.height() * 0.6f,
+                intArrayOf(0, 0, 0x33E1FFEC, 0x42F0FFF4, 0, 0), floatArrayOf(0f, 0.24f, 0.33f, 0.35f, 0.45f, 1f), Shader.TileMode.CLAMP)
+            c.drawRoundRect(R, rad, rad, p); p.shader = null
+            return
+        }
         p.shader = LinearGradient(R.left, R.top, R.left + R.width() * 0.7f, R.bottom, stops, floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
         c.drawRoundRect(R, rad, rad, p); p.shader = null
         c.save(); path.reset(); path.addRoundRect(R, rad, rad, Path.Direction.CW); c.clipPath(path)
@@ -756,11 +773,14 @@ class Painter(ctx: Context) {
         val R = G.radius; val w = G.w
         fill(F.stops[2]); p.setShadowLayer(dp(24f), 0f, dp(10f), 0x99000000.toInt()); c.drawRoundRect(body, R, R, p); p.clearShadowLayer()
         G.wheel?.let { wheel(c, it, live.volume) }
-        metal(c, body, R, F.stops, false)
-        c.save(); path.reset(); path.addRoundRect(body, R, R, Path.Direction.CW); c.clipPath(path)
-        p.shader = RadialGradient(body.left + w * 0.18f, body.top + G.h * 0.02f, w * 1.1f, Color.WHITE.a(0.32f), 0, Shader.TileMode.CLAMP)
-        c.drawRect(body, p); p.shader = null
-        c.restore()
+        metal(c, body, R, F.stops, false, F.lacquer)
+        if (!F.lacquer) {
+            // one highlight over the shoulder (lacquer has its clear-coat reflection instead)
+            c.save(); path.reset(); path.addRoundRect(body, R, R, Path.Direction.CW); c.clipPath(path)
+            p.shader = RadialGradient(body.left + w * 0.18f, body.top + G.h * 0.02f, w * 1.1f, Color.WHITE.a(0.32f), 0, Shader.TileMode.CLAMP)
+            c.drawRect(body, p); p.shader = null
+            c.restore()
+        }
         bevel(c, body, R)
         G.wheel?.let { fill(Color.BLACK.a(0.35f)); r.set(it.left - dp(0.6f), it.top - dp(1.2f), it.left + it.width() * 0.5f, it.bottom + dp(1.2f)); c.drawRoundRect(r, dp(2f), dp(2f), p) }
 
@@ -770,14 +790,17 @@ class Painter(ctx: Context) {
         val Ld = G.lid ?: return
         val lr = w * 0.07f
         fill(F.lid[1]); p.setShadowLayer(dp(3f), 0f, dp(1f), 0x47000000); c.drawRoundRect(Ld, lr, lr, p); p.clearShadowLayer()
-        metal(c, Ld, lr, intArrayOf(F.lid[0], F.lid[1], F.stops[1]), true)
-        c.save(); path.reset(); path.addRoundRect(Ld, lr, lr, Path.Direction.CW); c.clipPath(path)
-        p.shader = RadialGradient(Ld.left + Ld.width() * 0.4f, Ld.top + Ld.height() * 0.32f, Ld.height() * 0.85f,
-            intArrayOf(Color.WHITE.a(0.22f), 0, Color.BLACK.a(0.14f)), floatArrayOf(0f, 0.6f, 1f), Shader.TileMode.CLAMP)
-        c.drawRect(Ld, p); p.shader = null
-        c.restore()
+        metal(c, Ld, lr, intArrayOf(F.lid[0], F.lid[1], if (F.lacquer) F.stops[2] else F.stops[1]), true, F.lacquer)
+        if (!F.lacquer) {
+            c.save(); path.reset(); path.addRoundRect(Ld, lr, lr, Path.Direction.CW); c.clipPath(path)
+            p.shader = RadialGradient(Ld.left + Ld.width() * 0.4f, Ld.top + Ld.height() * 0.32f, Ld.height() * 0.85f,
+                intArrayOf(Color.WHITE.a(0.22f), 0, Color.BLACK.a(0.14f)), floatArrayOf(0f, 0.6f, 1f), Shader.TileMode.CLAMP)
+            c.drawRect(Ld, p); p.shader = null
+            c.restore()
+        }
         s.strokeWidth = dp(1f); s.color = Color.BLACK.a(0.42f); r.set(Ld.left - dp(0.5f), Ld.top - dp(0.5f), Ld.right + dp(0.5f), Ld.bottom + dp(0.5f)); c.drawRoundRect(r, lr, lr, s)
-        s.strokeWidth = dp(0.6f); s.color = Color.WHITE.a(0.5f); r.set(Ld.left + dp(0.4f), Ld.top + dp(0.4f), Ld.right - dp(0.4f), Ld.bottom - dp(0.4f)); c.drawRoundRect(r, lr, lr, s)
+        // the seam's lit edge; on lacquer, a champagne coachline
+        s.strokeWidth = dp(0.6f); s.color = if (F.lacquer) 0x8CD9BB86.toInt() else Color.WHITE.a(0.5f); r.set(Ld.left + dp(0.4f), Ld.top + dp(0.4f), Ld.right - dp(0.4f), Ld.bottom - dp(0.4f)); c.drawRoundRect(r, lr, lr, s)
 
         lens(c, G, detail, live.lifting)
 
@@ -875,7 +898,7 @@ class Painter(ctx: Context) {
         val body = RectF(G.x, G.y, G.x + G.w, G.y + G.h)
         val R = G.radius
         fill(F.stops[2]); p.setShadowLayer(dp(20f), 0f, dp(9f), 0x99000000.toInt()); c.drawRoundRect(body, R, R, p); p.clearShadowLayer()
-        metal(c, body, R, F.stops, false)
+        metal(c, body, R, F.stops, false, F.lacquer)
         bevel(c, body, R)
         lcd(c, G.lcd, detail, live)
         val C = G.comp ?: return
@@ -925,7 +948,8 @@ class Painter(ctx: Context) {
     /** Inside of the door when the phone is open: the shelf is kept here. */
     fun doorInside(c: Canvas, area: RectF, hingeRight: Boolean) {
         val rad = dp(18f)
-        p.shader = LinearGradient(area.left, area.top, area.right, area.bottom, 0xFF45586C.toInt(), 0xFF2F3D4C.toInt(), Shader.TileMode.CLAMP)
+        val inside = finish().inside
+        p.shader = LinearGradient(area.left, area.top, area.right, area.bottom, inside[0], inside[1], Shader.TileMode.CLAMP)
         c.drawRoundRect(area, rad, rad, p); p.shader = null
         c.save(); path.reset(); path.addRoundRect(area, rad, rad, Path.Direction.CW); c.clipPath(path)
         s.strokeWidth = 1f; s.color = 0x09FFFFFF
