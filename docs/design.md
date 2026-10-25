@@ -48,3 +48,11 @@ Mechack's idea, 25 Oct. The Fold's hinge is on the left, so the cover screen sit
 ## Left out
 
 Makers' logos and wordmarks on the shells, Sony's name and the Walkman mark, and Deck-Man's tape-tangling joke (friction dressed as fun).
+
+## First recording, 25 Oct: the shelf at scale
+
+Mechack's library made 808 tapes, most of them singles. A shelf you cannot get through is friction, so:
+
+- **Singles tapes.** An artist's singles (one or two tracks each) share one tape labelled Singles, the way songs were taped off the radio. A lone single keeps its own tape.
+- **The index (Giulietta).** A–Z sits hidden in the door's trim on the hinge side. Touching the edge wakes it; sliding jumps to each letter with a tick, and the letter is written large across the shelf while held. It blends back 1.2 s after release.
+- **Fixes.** The heading scrolls with the tapes instead of sliding under them; the hinge knuckles, which read as scrollbars, became a single moulded groove; the play LED moved into the key strip.
