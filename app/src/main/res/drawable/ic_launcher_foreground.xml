@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- The window: smoked acrylic -->
+    <path android:pathData="M33,32h42a5,5 0 0 1 5,5v34a5,5 0 0 1 -5,5h-42a5,5 0 0 1 -5,-5v-34a5,5 0 0 1 5,-5z" android:fillColor="#FF151A21"/>
+    <!-- The tape packs: one nearly full, one nearly empty; the physics is the picture -->
+    <path android:pathData="M28.5,52a13.5,13.5 0 1 0 27,0a13.5,13.5 0 1 0 -27,0z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="radial" android:centerX="38" android:centerY="47" android:gradientRadius="14">
+                <item android:offset="0" android:color="#FF5A4334"/>
+                <item android:offset="1" android:color="#FF25190F"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:pathData="M63,52a7.6,7.6 0 1 0 15.2,0a7.6,7.6 0 1 0 -15.2,0z" android:fillColor="#FF3B2A20"/>
+    <!-- Hubs with their drive teeth -->
+    <path android:pathData="M36,52a6,6 0 1 0 12,0a6,6 0 1 0 -12,0z M66.6,52a6,6 0 1 0 12,0a6,6 0 1 0 -12,0z" android:fillColor="#FFE9E6DF"/>
+    <path android:pathData="M39.6,52a2.4,2.4 0 1 0 4.8,0a2.4,2.4 0 1 0 -4.8,0z M70.2,52a2.4,2.4 0 1 0 4.8,0a2.4,2.4 0 1 0 -4.8,0z" android:fillColor="#FF0C0D0F"/>
+    <!-- Handwritten label strip -->
+    <path android:pathData="M33,35.5h42v6h-42z" android:fillColor="#FFF2EFE6"/>
+    <path android:pathData="M36,39.2c3,-1.2 5,0.6 8,-0.4s5,-1 8,0s6,-0.8 9,-0.2" android:strokeColor="#FF1F2C6B" android:strokeWidth="0.9" android:strokeLineCap="round"/>
+    <!-- One soft highlight across the acrylic -->
+    <path android:pathData="M50,32h9l-17,44h-9z" android:fillColor="#14FFFFFF"/>
+    <!-- Amber LED: playing -->
+    <path android:pathData="M72.6,80.5a1.9,1.9 0 1 0 3.8,0a1.9,1.9 0 1 0 -3.8,0z" android:fillColor="#FFFFAD33"/>
+</vector>
