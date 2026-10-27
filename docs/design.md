@@ -96,3 +96,12 @@ Mechack: placing the cassette did not sound like the traditional cassette sound.
 Still "way off" (Mechack), and he played reference recordings of a real cassette mechanism (buttons, play, motor off, unlatching, rewind and stop) to show it. The first set used modal synthesis, tuned resonances ringing at fixed pitches, which reads as synthetic. Measured over 42 click onsets in the reference, a real click is broadband and barely rings: its power peaks around 315-400 Hz with a separate knock near 63 Hz and rolls off towards 16 kHz; it falls 20 dB in a median 15 ms; a typical event carries a large share of its energy below 200 Hz; actions come as clusters, a main click then smaller settling clicks; the rewind motor is a high whine near 1,465 Hz over a hum near 312 Hz, not the 220 Hz drone used before.
 
 Every sound was rebuilt from noise shaped to that measured spectrum, with the measured decay and a low knock, in clusters per action, and checked against the reference: decay 15.0 ms against 15.4, spectrum within a few dB per third-octave band. Only statistics were taken from the reference recordings (licensed Soundsnap effects); no audio from them is used.
+
+## Full bleed, 27 Oct
+
+Mechack: both screens would look better if the shell and the compartment used the whole screen. Agreed: a player drawn as a rounded object floating on a black ground reads as a picture of a Walkman, not the Walkman.
+
+- **Folded:** the brushed body is the cover screen, edge to edge, with no outer radius and no drop shadow. The display's own rounded corners do the work the body's corners did. The lid runs taller to fill the length. The volume wheel sits on the screen's right edge, as on the real body.
+- **Unfolded:** the right half is the compartment's metal to the screen's edges; the left half is the inside of the door to the edges, meeting at the crease. The shelf scrolls inside that panel.
+- **System bars** are transparent and the metal runs under them; the readout, keys and tapes keep clear of the status and navigation bars.
+- **Known trade-off:** on the light finishes (blue, grey) the white status icons sit on pale metal. Visconti, graphite and rosso are unaffected.

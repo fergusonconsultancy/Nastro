@@ -54,17 +54,24 @@ class PlayerGeom private constructor(val kind: Kind, val x: Float, val w: Float)
     var wheel: RectF? = null
     var comp: RectF? = null
     var radius = 0f
+    /** The player's body: the whole screen (or half) when it runs full-bleed, else its own shape. */
+    var body = RectF()
 
     companion object {
         const val CW = 100.4f
         const val CH = 63.8f
         private const val REEL_Y = -2f
 
-        fun face(x: Float, y: Float, w: Float, h: Float): PlayerGeom = PlayerGeom(Kind.FACE, x, w).apply {
-            val lidH = (h - 1.0f * w).coerceIn(0.8f * w, 1.5f * w)
+        /**
+         * [x], [y], [w], [h] is the safe area for the parts (clear of the camera and system bars);
+         * [bleed], when given, is the body: the whole screen, its corners the phone's own.
+         */
+        fun face(x: Float, y: Float, w: Float, h: Float, bleed: RectF? = null): PlayerGeom = PlayerGeom(Kind.FACE, x, w).apply {
+            val lidH = (h - 1.0f * w).coerceIn(0.8f * w, if (bleed != null) 2.2f * w else 1.5f * w)
             this.h = 1.0f * w + lidH
             this.y = y + (h - this.h) / 2
-            radius = w * 0.12f
+            radius = if (bleed != null) 0f else w * 0.12f
+            body = bleed?.let { RectF(it) } ?: RectF(x, this.y, x + w, this.y + this.h)
             lcd = RectF(x + 0.07f * w, this.y + 0.07f * w, x + 0.93f * w, this.y + 0.32f * w)
             val ld = RectF(x + 0.055f * w, lcd.bottom + 0.055f * w, x + 0.945f * w, lcd.bottom + 0.055f * w + lidH)
             lid = ld
@@ -83,12 +90,15 @@ class PlayerGeom private constructor(val kind: Kind, val x: Float, val w: Float)
                 Legend("autoRev", "AUTO REV", st.left + st.width() * 0.34f, st.top + st.height() * 0.8f, st.width() * 0.34f, st.height() * 0.4f),
             )
             battery = RectF(st.left + st.width() * 0.72f, st.top + st.height() * 0.06f, st.right, st.top + st.height() * 0.94f)
-            wheel = RectF(x + w - 0.012f * w, ld.top + ld.height() * 0.08f, x + w + 0.033f * w, ld.top + ld.height() * 0.08f + 0.36f * w)
+            // the volume wheel stands proud of the body's edge; full-bleed, it emerges from the screen's edge
+            val wr = bleed?.right ?: (x + w)
+            wheel = RectF(wr - 0.03f * w, ld.top + ld.height() * 0.08f, wr + 0.015f * w, ld.top + ld.height() * 0.08f + 0.36f * w)
         }
 
-        fun bay(x: Float, y: Float, w: Float, h: Float): PlayerGeom = PlayerGeom(Kind.BAY, x, w).apply {
+        fun bay(x: Float, y: Float, w: Float, h: Float, bleed: RectF? = null): PlayerGeom = PlayerGeom(Kind.BAY, x, w).apply {
             this.y = y; this.h = h
-            radius = w * 0.08f
+            radius = if (bleed != null) 0f else w * 0.08f
+            body = bleed?.let { RectF(it) } ?: RectF(x, y, x + w, y + h)
             lcd = RectF(x + 0.06f * w, y + 0.05f * w, x + 0.94f * w, y + 0.25f * w)
             val chanH = 0.2f * w
             chan = RectF(x + 0.05f * w, y + h - chanH - 0.05f * w, x + 0.95f * w, y + h - 0.05f * w)
@@ -779,9 +789,9 @@ class Painter(ctx: Context) {
     fun face(c: Canvas, G: PlayerGeom, live: Live) {
         val F = finish()
         val detail = 1 - Deck.conc
-        val body = RectF(G.x, G.y, G.x + G.w, G.y + G.h)
+        val body = G.body
         val R = G.radius; val w = G.w
-        fill(F.stops[2]); p.setShadowLayer(dp(24f), 0f, dp(10f), 0x99000000.toInt()); c.drawRoundRect(body, R, R, p); p.clearShadowLayer()
+        fill(F.stops[2]); if (R > 0) p.setShadowLayer(dp(24f), 0f, dp(10f), 0x99000000.toInt()); c.drawRoundRect(body, R, R, p); p.clearShadowLayer()
         G.wheel?.let { wheel(c, it, live.volume) }
         metal(c, body, R, F.stops, false, F.lacquer, F.aniso)
         if (!F.lacquer && !F.aniso) {
@@ -905,9 +915,9 @@ class Painter(ctx: Context) {
     fun bay(c: Canvas, G: PlayerGeom, live: Live) {
         val F = finish()
         val detail = 1 - Deck.conc
-        val body = RectF(G.x, G.y, G.x + G.w, G.y + G.h)
+        val body = G.body
         val R = G.radius
-        fill(F.stops[2]); p.setShadowLayer(dp(20f), 0f, dp(9f), 0x99000000.toInt()); c.drawRoundRect(body, R, R, p); p.clearShadowLayer()
+        fill(F.stops[2]); if (R > 0) p.setShadowLayer(dp(20f), 0f, dp(9f), 0x99000000.toInt()); c.drawRoundRect(body, R, R, p); p.clearShadowLayer()
         metal(c, body, R, F.stops, false, F.lacquer, F.aniso)
         bevel(c, body, R)
         lcd(c, G.lcd, detail, live)
@@ -956,8 +966,7 @@ class Painter(ctx: Context) {
     class Slot(val tape: Tape, val index: Int, val rect: RectF)
 
     /** Inside of the door when the phone is open: the shelf is kept here. */
-    fun doorInside(c: Canvas, area: RectF, hingeRight: Boolean) {
-        val rad = dp(18f)
+    fun doorInside(c: Canvas, area: RectF, hingeRight: Boolean, rad: Float = dp(18f)) {
         val inside = finish().inside
         p.shader = LinearGradient(area.left, area.top, area.right, area.bottom, inside[0], inside[1], Shader.TileMode.CLAMP)
         c.drawRoundRect(area, rad, rad, p); p.shader = null
@@ -998,10 +1007,13 @@ class Painter(ctx: Context) {
         handwrite(c, ch.toString(), area.centerX(), area.centerY() + dp(30f), dp(96f), dp(200f), 0xFFF2EFE6.toInt().a(a), Paint.Align.CENTER)
     }
 
-    fun shelf(c: Canvas, area: RectF, slots: List<Slot>, lean: FloatArray, header: Boolean, onDoor: Boolean, count: Int, scroll: Float = 0f) {
+    /** [area] holds the tapes; [bg], when given, is the full-bleed panel behind them (square-cornered). */
+    fun shelf(c: Canvas, area: RectF, slots: List<Slot>, lean: FloatArray, header: Boolean, onDoor: Boolean, count: Int, scroll: Float = 0f, bg: RectF? = null) {
         val fade = 1 - Deck.conc * 0.75f
-        if (onDoor) doorInside(c, area, true) else { fill(0xFF13171C.toInt()); c.drawRoundRect(area, dp(18f), dp(18f), p) }
-        c.save(); path.reset(); path.addRoundRect(area, dp(18f), dp(18f), Path.Direction.CW); c.clipPath(path)
+        val panel = bg ?: area
+        val rad = if (bg != null) 0f else dp(18f)
+        if (onDoor) doorInside(c, panel, true, rad) else { fill(0xFF13171C.toInt()); c.drawRoundRect(panel, rad, rad, p) }
+        c.save(); path.reset(); path.addRoundRect(panel, rad, rad, Path.Direction.CW); c.clipPath(path)
         if (header) {
             // The heading scrolls away with the tapes rather than sliding under them
             val pad = dp(18f)

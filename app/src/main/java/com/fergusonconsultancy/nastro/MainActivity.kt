@@ -19,8 +19,11 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Deck.init(this)
-        window.statusBarColor = 0xFF07090B.toInt()
-        window.navigationBarColor = 0xFF07090B.toInt()
+        // Full-bleed: the player's metal runs under the status and navigation bars
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        window.isNavigationBarContrastEnforced = false
+        window.isStatusBarContrastEnforced = false
         window.attributes = window.attributes.apply { layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES }
         window.setDecorFitsSystemWindows(false)
 

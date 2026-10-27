@@ -55,6 +55,8 @@ class StageView(ctx: Context) : View(ctx) {
     private var deck: PlayerGeom? = null
     private var face: PlayerGeom? = null           // the face over the right half, for the swing
     private val shelfArea = RectF()
+    /** The full-bleed panel behind the shelf: the inside of the door, edge to edge. */
+    private val shelfBg = RectF()
     private var slots: List<Painter.Slot> = emptyList()
     private var lean = FloatArray(0)
     private var leanV = FloatArray(0)
@@ -125,17 +127,27 @@ class StageView(ctx: Context) : View(ctx) {
         val L = paddingLeft.toFloat(); val T = paddingTop.toFloat()
         val W = (width - paddingLeft - paddingRight).toFloat(); val H = (height - paddingTop - paddingBottom).toFloat()
         if (W <= 0 || H <= 0) return
+        // Full-bleed: the open Walkman spans the whole main screen (the door's inside on the left, the
+        // compartment on the right, meeting at the crease), and folded, the face fills the cover screen.
+        // The parts keep clear of the camera and system bars; the metal runs to every edge.
+        val Wf = width.toFloat(); val Hf = height.toFloat()
         if (open) {
-            val half = width / 2f
-            val m = (width - paddingRight - half) * 0.045f
-            val bw = width - paddingRight - half - m * 2
-            deck = PlayerGeom.bay(half + m, T + m, bw, H - m * 2)
-            face = PlayerGeom.face(half + m, T + m, bw, H - m * 2)
-            shelfArea.set(L + dp(12f), T + dp(12f), half - dp(14f), T + H - dp(12f))
+            val half = Wf / 2f
+            val g = dp(10f)
+            val bleed = RectF(half, 0f, Wf, Hf)
+            val bw = Wf - paddingRight - half - g * 2
+            deck = PlayerGeom.bay(half + g, T + g, bw, H - g * 2, bleed)
+            face = PlayerGeom.face(half + g, T + g, bw, H - g * 2, bleed)
+            shelfBg.set(0f, 0f, half, Hf)
+            shelfArea.set(L + dp(12f), T + dp(6f), half - dp(12f), T + H - dp(6f))
         } else {
             val v = easeOut(view)
-            deck = PlayerGeom.face(L + W * 0.05f + v * W * 1.05f, T + H * 0.03f, W * 0.9f, H * 0.94f)
-            shelfArea.set(L + dp(10f) - (1 - v) * W * 1.05f, T + dp(10f), L + W - dp(10f) - (1 - v) * W * 1.05f, T + H - dp(10f))
+            val off = v * Wf * 1.04f
+            val g = dp(8f)
+            deck = PlayerGeom.face(L + g + off, T + g, W - g * 2, H - g * 2, RectF(off, 0f, Wf + off, Hf))
+            val so = (1 - v) * Wf * 1.04f
+            shelfBg.set(-so, 0f, Wf - so, Hf)
+            shelfArea.set(L + dp(10f) - so, T + dp(6f), L + W - dp(10f) - so, T + H - dp(6f))
         }
         layoutShelf()
     }
@@ -304,7 +316,7 @@ class StageView(ctx: Context) : View(ctx) {
     }
 
     private fun drawShelf(c: Canvas) {
-        painter.shelf(c, shelfArea, slots, lean, true, open, Library.tapes.size, shelfScroll)
+        painter.shelf(c, shelfArea, slots, lean, true, open, Library.tapes.size, shelfScroll, shelfBg)
         // the way to the settings when unfolded: on the shelf's heading, scrolling away with it
         val sy = shelfArea.top + dp(30f) - shelfScroll
         if (sy > shelfArea.top) {
