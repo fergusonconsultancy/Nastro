@@ -108,7 +108,13 @@ class StageView(ctx: Context) : View(ctx) {
     // ---- layout --------------------------------------------------------------------------------
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        val nowOpen = w > h * 0.8f
+        // 29 Oct 2026: open means the app has (most of) the main screen. Read from the display,
+        // not guessed from this window's proportions, which a split screen or the Fold8 Ultra's
+        // near-square inner screen could put on the wrong side of a ratio
+        val nowOpen = onMainScreen(w, h)
+        // The crease runs down the inner screen's upright centre; turned on its side it runs
+        // across. Then the open Walkman turns with the phone, as a real one would
+        turned = nowOpen && (display?.rotation == android.view.Surface.ROTATION_90 || display?.rotation == android.view.Surface.ROTATION_270)
         if (nowOpen && !open && oldw != 0) {
             // Unfolding: the door pops on its spring and swings open over the left half
             swing = if (Prefs.doorSwing) 0f else 1f; swingFrom = SystemClock.uptimeMillis()
@@ -123,19 +129,42 @@ class StageView(ctx: Context) : View(ctx) {
         layoutAll()
     }
 
+    /** True when this window is on the inner (main) screen and has most of it, not a split share. */
+    private fun onMainScreen(w: Int, h: Int): Boolean {
+        val m = android.util.DisplayMetrics()
+        @Suppress("DEPRECATION") display?.getRealMetrics(m)
+        if (m.widthPixels <= 0) return w > h * 0.8f
+        val inner = minOf(m.widthPixels, m.heightPixels) / m.density >= 600f
+        val most = w.toFloat() * h >= 0.7f * m.widthPixels * m.heightPixels
+        return inner && most
+    }
+
+    // ---- turned on its side ---------------------------------------------------------------------
+    // Everything is laid out and drawn in an upright frame (crease down its middle); when the
+    // phone is on its side the frame is turned a quarter onto the screen and touches are turned
+    // back into it. fw and fh are the frame's size; pl, pt, pr, pb its insets.
+    private var turned = false
+    private val fw get() = if (turned) height else width
+    private val fh get() = if (turned) width else height
+    private val pl get() = if (turned) paddingTop else paddingLeft
+    private val pt get() = if (turned) paddingRight else paddingTop
+    private val pr get() = if (turned) paddingBottom else paddingRight
+    private val pb get() = if (turned) paddingLeft else paddingBottom
+    private val toFrame = android.graphics.Matrix()
+
     private fun layoutAll() {
-        val L = paddingLeft.toFloat(); val T = paddingTop.toFloat()
-        val W = (width - paddingLeft - paddingRight).toFloat(); val H = (height - paddingTop - paddingBottom).toFloat()
+        val L = pl.toFloat(); val T = pt.toFloat()
+        val W = (fw - pl - pr).toFloat(); val H = (fh - pt - pb).toFloat()
         if (W <= 0 || H <= 0) return
         // Full-bleed: the open Walkman spans the whole main screen (the door's inside on the left, the
         // compartment on the right, meeting at the crease), and folded, the face fills the cover screen.
         // The parts keep clear of the camera and system bars; the metal runs to every edge.
-        val Wf = width.toFloat(); val Hf = height.toFloat()
+        val Wf = fw.toFloat(); val Hf = fh.toFloat()
         if (open) {
             val half = Wf / 2f
             val g = dp(10f)
             val bleed = RectF(half, 0f, Wf, Hf)
-            val bw = Wf - paddingRight - half - g * 2
+            val bw = Wf - pr - half - g * 2
             deck = PlayerGeom.bay(half + g, T + g, bw, H - g * 2, bleed)
             face = PlayerGeom.face(half + g, T + g, bw, H - g * 2, bleed)
             shelfBg.set(0f, 0f, half, Hf)
@@ -224,6 +253,14 @@ class StageView(ctx: Context) : View(ctx) {
 
     // ---- drawing -------------------------------------------------------------------------------
     override fun onDraw(c: Canvas) {
+        if (!turned) { scene(c); return }
+        val k = c.save()
+        c.translate(width.toFloat(), 0f); c.rotate(90f)
+        scene(c)
+        c.restoreToCount(k)
+    }
+
+    private fun scene(c: Canvas) {
         val now = SystemClock.uptimeMillis()
         val dt = if (lastFrame == 0L) 0f else ((now - lastFrame) / 1000f).coerceIn(0f, 0.05f)
         lastFrame = now
@@ -283,9 +320,9 @@ class StageView(ctx: Context) : View(ctx) {
         c.restore()
         if (open) {
             // the crease
-            val cx = width / 2f
+            val cx = fw / 2f
             val p = Paint().apply { shader = android.graphics.LinearGradient(cx - dp(6f), 0f, cx + dp(6f), 0f, intArrayOf(0, 0x12FFFFFF, 0), null, android.graphics.Shader.TileMode.CLAMP) }
-            c.drawRect(cx - dp(6f), 0f, cx + dp(6f), height.toFloat(), p)
+            c.drawRect(cx - dp(6f), 0f, cx + dp(6f), fh.toFloat(), p)
         }
 
         val busy = Deck.animating() || Deck.mode == Deck.Mode.PLAY || swing < 1f || shake > 0 || abs(view - viewTarget) > 0.001f ||
@@ -295,22 +332,22 @@ class StageView(ctx: Context) : View(ctx) {
 
     /** Unfolding is opening the door: the face swings on the crease out over the left half, and its inside becomes the shelf. */
     private fun drawSwing(c: Canvas, G: PlayerGeom, now: Long, lifting: Boolean) {
-        val cx = width / 2f
+        val cx = fw / 2f
         val th = easeInOut(swing) * PI
         val cs = cos(th).toFloat()
         val shade = Paint()
         painter.bay(c, G, live)
-        shade.color = Color.BLACK.a(0.55f * (1 - swing)); c.drawRect(cx, 0f, width.toFloat(), height.toFloat(), shade)
+        shade.color = Color.BLACK.a(0.55f * (1 - swing)); c.drawRect(cx, 0f, fw.toFloat(), fh.toFloat(), shade)
         c.save()
         c.translate(cx, 0f); c.scale(max(0.001f, abs(cs)), 1f); c.translate(-cx, 0f)
         if (cs > 0) {
             // the face, still shut over the compartment, turning away
             face?.let { painter.face(c, it, live) }
-            shade.color = Color.BLACK.a(0.5f * (1 - cs)); c.drawRect(cx, 0f, width.toFloat(), height.toFloat(), shade)
+            shade.color = Color.BLACK.a(0.5f * (1 - cs)); c.drawRect(cx, 0f, fw.toFloat(), fh.toFloat(), shade)
         } else {
             // the inside of the door coming down onto the left half
             drawShelf(c)
-            shade.color = Color.BLACK.a(0.5f * (1 + cs)); c.drawRect(0f, 0f, cx, height.toFloat(), shade)
+            shade.color = Color.BLACK.a(0.5f * (1 + cs)); c.drawRect(0f, 0f, cx, fh.toFloat(), shade)
         }
         c.restore()
     }
@@ -348,7 +385,7 @@ class StageView(ctx: Context) : View(ctx) {
     }
 
     private fun message(c: Canvas, title: String, sub: String) {
-        val cx = width / 2f; val cy = height / 2f
+        val cx = fw / 2f; val cy = fh / 2f
         text.textSize = dp(20f); text.color = 0xFFE6EBF0.toInt(); c.drawText(title, cx, cy, text)
         text.textSize = dp(14f); text.color = 0xFF8D98A5.toInt(); c.drawText(sub, cx, cy + dp(28f), text)
     }
@@ -379,6 +416,14 @@ class StageView(ctx: Context) : View(ctx) {
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
+        if (!turned) return touch(e)
+        // Back into the upright frame: the inverse of the quarter turn used to draw it
+        toFrame.reset(); toFrame.setRotate(-90f); toFrame.postTranslate(0f, width.toFloat())
+        val f = MotionEvent.obtain(e); f.transform(toFrame)
+        return try { touch(f) } finally { f.recycle() }
+    }
+
+    private fun touch(e: MotionEvent): Boolean {
         val x = e.x; val y = e.y
         if (needsPermission) { if (e.action == MotionEvent.ACTION_UP) onAskPermission?.invoke(); return true }
         val G = deck ?: return true

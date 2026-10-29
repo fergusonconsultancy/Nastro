@@ -303,6 +303,7 @@ class Painter(ctx: Context) {
             c.drawLine(sx - 1, sy - 1, sx + 1, sy + 1, s); c.drawLine(sx + 1, sy - 1, sx - 1, sy + 1, s)
         }
         fill(0xFF0A0A0A.toInt()); c.drawCircle(-12f, 28.5f, 1.5f, p); c.drawCircle(12f, 28.5f, 1.5f, p)
+        if (live) transport(c, sh)
         s.strokeWidth = 0.5f; s.color = 0x24FFFFFF; c.drawPath(outline, s)
     }
 
@@ -413,22 +414,97 @@ class Painter(ctx: Context) {
         }
     }
 
-    /** Heads, pinch roller, capstan and guides, in the cassette's millimetres (foot at +y). */
+    /**
+     * Heads, pinch roller, capstan and guides, in the cassette's millimetres (foot at +y). They
+     * move with the transport (Deck.engage): on play the head slides up into the cassette's head
+     * opening and the pinch roller closes on the capstan; on stop and while winding both fall back.
+     */
     fun mechanism(c: Canvas) {
         fun steel(x: Float, y: Float, rad: Float) {
             p.shader = RadialGradient(x - rad * 0.3f, y - rad * 0.3f, rad * 1.3f, 0xFFF2F4F6.toInt(), 0xFF7D848C.toInt(), Shader.TileMode.CLAMP)
             c.drawCircle(x, y, rad, p); p.shader = null
         }
-        fill(0xFF4A525C.toInt()); r.set(-25f, 32.6f, 25f, 36.8f); c.drawRoundRect(r, 1.4f, 1.4f, p)
+        val e = Deck.engage
+        val back = 1.7f * (1 - e)            // the head's travel, mm
+        // The head plate, carrying the head and the erase bar
+        fill(0xFF4A525C.toInt()); r.set(-25f, 32.6f + back, 25f, 36.8f + back); c.drawRoundRect(r, 1.4f, 1.4f, p)
         p.shader = LinearGradient(-5f, 0f, 5f, 0f, intArrayOf(0xFF9AA1A8.toInt(), 0xFFF1F3F5.toInt(), 0xFF8D949B.toInt()), null, Shader.TileMode.CLAMP)
-        r.set(-5f, 29.6f, 5f, 34.2f); c.drawRoundRect(r, 1.6f, 1.6f, p); p.shader = null
-        fill(0xFF2B2F34.toInt()); c.drawRect(-0.15f, 29.6f, 0.15f, 31.6f, p)
-        fill(0xFF121314.toInt()); c.drawCircle(17.5f, 33.4f, 2.9f, p)
-        s.strokeWidth = 0.4f; s.color = 0x29FFFFFF; r.set(15.3f, 31.2f, 19.7f, 35.6f); c.drawArc(r, 180f, 108f, false, s)
-        steel(13.6f, 31.6f, 0.85f); steel(-29f, 32.6f, 1.1f); steel(29f, 32.6f, 1.1f)
+        r.set(-5f, 30.05f + back, 5f, 34.2f + back); c.drawRoundRect(r, 1.6f, 1.6f, p); p.shader = null
+        fill(0xFF2B2F34.toInt()); c.drawRect(-0.15f, 30.05f + back, 0.15f, 31.6f + back, p)
         s.strokeWidth = 0.35f; s.color = 0xFF9AA1A8.toInt()
-        path.reset(); for (i in 0 until 7) { val yy = 35.4f + if (i % 2 == 1) 0.5f else -0.5f; if (i == 0) path.moveTo(-3f, yy) else path.lineTo(-3f + i, yy) }
+        path.reset(); for (i in 0 until 7) { val yy = 35.4f + back + if (i % 2 == 1) 0.5f else -0.5f; if (i == 0) path.moveTo(-3f, yy) else path.lineTo(-3f + i, yy) }
         c.drawPath(path, s)
+        // Capstan: a polished pin with a flat that shows it turning
+        steel(13.6f, 31.6f, 0.85f)
+        if (e > 0.6f) spokes(c, 13.6f, 31.6f, 0.7f, Deck.capstanAng, 1, 0x99505860.toInt())
+        // Pinch roller: closes on the capstan with the head, black rubber with a turning mark
+        val off = 1.3f * (1 - e)
+        // Engaged, it grips: its rim meets the capstan's (centres 3.75 mm apart)
+        val px = 17.0f + off; val py = 33.17f + off
+        fill(0xFF121314.toInt()); c.drawCircle(px, py, 2.9f, p)
+        s.strokeWidth = 0.4f; s.color = 0x29FFFFFF; r.set(px - 2.2f, py - 2.2f, px + 2.2f, py + 2.2f); c.drawArc(r, 180f, 108f, false, s)
+        spokes(c, px, py, 2.1f, Deck.pinchAng, 3, 0x40FFFFFF)
+        fill(0xFF5A6068.toInt()); c.drawCircle(px, py, 0.7f, p)
+        // The deck's own tape guides either side of the head
+        steel(-29f, 32.6f + back * 0.4f, 1.1f); steel(29f, 32.6f + back * 0.4f, 1.1f)
+    }
+
+    /**
+     * Marks on a turning part, so its turning is seen. Concentrato: the faster it spins, the more
+     * the marks blur away, until a fast wind shows only the smooth part (no strobing spokes).
+     */
+    private fun spokes(c: Canvas, x: Float, y: Float, rad: Float, ang: Float, n: Int, col: Int) {
+        val speed = kotlin.math.abs(Deck.tapeMmS) / rad
+        val clear = 1f - ((speed - 40f) / 160f).coerceIn(0f, 1f)
+        if (clear <= 0.02f) return
+        s.strokeWidth = rad * 0.22f; s.color = col.a(clear * ((col ushr 24) / 255f)); s.strokeCap = Paint.Cap.ROUND
+        for (i in 0 until n) {
+            val a = ang + i * (2 * PI / n).toFloat()
+            c.drawLine(x + cos(a) * rad * 0.25f, y + sin(a) * rad * 0.25f, x + cos(a) * rad * 0.85f, y + sin(a) * rad * 0.85f, s)
+        }
+        s.strokeCap = Paint.Cap.BUTT
+    }
+
+    /**
+     * In the cassette's foot: its two tape guides (white rollers in the corners) turning with the
+     * tape, and at the head opening the tape itself with the pressure pad on its spring behind it.
+     * As the head comes in it presses the tape back into the pad and the spring flexes.
+     */
+    private fun transport(c: Canvas, sh: Shell) {
+        val e = Deck.engage
+        // Tape guides
+        for (gx in floatArrayOf(-38f, 38f)) {
+            val gy = 26.9f
+            p.shader = RadialGradient(gx - 0.4f, gy - 0.4f, 1.9f, 0xFFF4F4F2.toInt(), 0xFFB9BCBF.toInt(), Shader.TileMode.CLAMP)
+            c.drawCircle(gx, gy, Deck.GUIDE_R, p); p.shader = null
+            s.strokeWidth = 0.18f; s.color = 0x59000000; c.drawCircle(gx, gy, Deck.GUIDE_R, s)
+            spokes(c, gx, gy, Deck.GUIDE_R * 0.95f, Deck.guideAng, 3, 0x8C5A5E63.toInt())
+            fill(0xFF6E7378.toInt()); c.drawCircle(gx, gy, 0.35f, p)
+        }
+        // The head opening, cut into the foot edge below the centre screw (screw ends at 28.6 mm)
+        val top = 28.9f; val bottom = CH / 2 + 0.2f
+        fill(0xFF0A0A0B.toInt()); r.set(-6.5f, top, 6.5f, bottom); c.drawRoundRect(r, 0.6f, 0.6f, p)
+        c.save(); r.set(-6.5f, top, 6.5f, bottom); c.clipRect(r)
+        val push = 0.35f * e
+        // Pressure pad spring: a bronze leaf anchored at its ends, flexing as the pad is pushed
+        s.strokeWidth = 0.28f; s.color = 0xFFB08A4E.toInt()
+        path.reset(); path.moveTo(-5.4f, 29.15f); path.quadTo(0f, 29.55f - push * 1.6f, 5.4f, 29.15f); c.drawPath(path, s)
+        // The pad: felt, pressed back by the tape
+        fill(0xFF6C6F68.toInt()); r.set(-2.1f, 29.75f - push, 2.1f, 30.35f - push); c.drawRoundRect(r, 0.2f, 0.2f, p)
+        // The tape across the opening: straight while the head is back, pressed into the pad by it
+        fill(0xFF3A281E.toInt())
+        path.reset()
+        path.moveTo(-6.5f, 30.4f); path.lineTo(-3f, 30.4f - push); path.lineTo(3f, 30.4f - push); path.lineTo(6.5f, 30.4f)
+        path.lineTo(6.5f, 30.85f); path.lineTo(3f, 30.85f - push); path.lineTo(-3f, 30.85f - push); path.lineTo(-6.5f, 30.85f); path.close()
+        c.drawPath(path, p)
+        // The head's face, seen in the opening as it arrives and presses the tape into the pad
+        val face = 30.85f - push + 1.7f * (1 - e)
+        if (face < bottom) {
+            p.shader = LinearGradient(-4f, 0f, 4f, 0f, intArrayOf(0xFF9AA1A8.toInt(), 0xFFF1F3F5.toInt(), 0xFF8D949B.toInt()), null, Shader.TileMode.CLAMP)
+            r.set(-4f, face, 4f, bottom + 2f); c.drawRoundRect(r, 0.9f, 0.9f, p); p.shader = null
+            fill(0xFF2B2F34.toInt()); c.drawRect(-0.12f, face, 0.12f, face + 1.2f, p)
+        }
+        c.restore()
     }
 
     // ---- the player ----------------------------------------------------------------------------------

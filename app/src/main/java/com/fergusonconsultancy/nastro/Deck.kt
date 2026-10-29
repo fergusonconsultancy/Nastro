@@ -44,6 +44,22 @@ object Deck {
     private var blank = false
     var angL = 0f; private set
     var angR = 0f; private set
+    // The transport (29 Oct 2026). The head and pinch roller come forward into the cassette on
+    // play and fall back on stop and while winding, as a real deck's do; everything that touches
+    // the tape turns at the tape's own speed, the same speed that turns the reels.
+    /** How far the head is in: 0 back, 1 against the tape (the pressure pad gives as it arrives). */
+    var engage = 0f; private set
+    /** The tape's speed past the head, mm/s, positive left to right on screen. */
+    var tapeMmS = 0f; private set
+    /** The cassette's two tape guides (rollers in the foot corners), radians. */
+    var guideAng = 0f; private set
+    /** The pinch roller, turning with the tape while it presses it to the capstan. */
+    var pinchAng = 0f; private set
+    /** The capstan: driven by the motor while the head is in. */
+    var capstanAng = 0f; private set
+    const val GUIDE_R = 1.4f
+    const val PINCH_R = 2.9f
+    const val CAPSTAN_R = 0.85f
     var door = 0f; private set
     private var doorTarget = 0f
     var flip = 0f; private set
@@ -255,7 +271,7 @@ object Deck {
         }
     }
     fun wake() { main.removeCallbacks(ticker); main.post(ticker) }
-    fun animating() = mode == Mode.FF || mode == Mode.REW || mode == Mode.AMS || abs(v) > 0.002 && mode != Mode.PLAY ||
+    fun animating() = (engage > 0f && engage < 1f) || mode == Mode.FF || mode == Mode.REW || mode == Mode.AMS || abs(v) > 0.002 && mode != Mode.PLAY ||
         door != doorTarget || flipping || pending != null || conc > 0.002f || (mode == Mode.PLAY && abs(v - dir) > 0.01)
 
     /** Advance the machine to [now] (uptime ms). Safe to call from every frame and from the ticker. */
@@ -306,6 +322,22 @@ object Deck {
         val mmPerS = (x - prevX) / dt.coerceAtLeast(1e-6) * L * TAPE_MM_S
         val rightward = (if (facing == 'A') 1 else -1) * mmPerS
         if (!dragging && dt > 0) { angL += (rightward / rl * dt).toFloat(); angR += (rightward / rr * dt).toFloat() }
+
+        // The transport follows the reels: the head is in only for play, out for stop and winding.
+        // It travels in about a tenth of a second, the click of a real mechanism, never springing back
+        val headIn = mode == Mode.PLAY && door < 0.02f && !flipping
+        val et = if (headIn) 1f else 0f
+        engage += (et - engage) * (1 - exp(-dt / if (headIn) 0.035 else 0.045)).toFloat()
+        if (abs(engage - et) < 0.003f) engage = et
+        tapeMmS = if (dt > 0) rightward.toFloat() else 0f
+        if (dt > 0) {
+            guideAng += (rightward / GUIDE_R * dt).toFloat()
+            // The pinch roller only turns while it holds the tape against the capstan
+            if (engage > 0.6f) {
+                pinchAng -= (rightward / PINCH_R * dt).toFloat()
+                capstanAng += (rightward / CAPSTAN_R * dt).toFloat()
+            }
+        }
 
         // Concentrato: emptier the faster it winds
         val sp = abs(v)
