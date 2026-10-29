@@ -439,7 +439,8 @@ class Painter(ctx: Context) {
         if (e > 0.6f) spokes(c, 13.6f, 31.6f, 0.7f, Deck.capstanAng, 1, 0x99505860.toInt())
         // Pinch roller: closes on the capstan with the head, black rubber with a turning mark
         val off = 1.3f * (1 - e)
-        val px = 17.5f + off; val py = 33.4f + off
+        // Engaged, it grips: its rim meets the capstan's (centres 3.75 mm apart)
+        val px = 17.0f + off; val py = 33.17f + off
         fill(0xFF121314.toInt()); c.drawCircle(px, py, 2.9f, p)
         s.strokeWidth = 0.4f; s.color = 0x29FFFFFF; r.set(px - 2.2f, py - 2.2f, px + 2.2f, py + 2.2f); c.drawArc(r, 180f, 108f, false, s)
         spokes(c, px, py, 2.1f, Deck.pinchAng, 3, 0x40FFFFFF)
