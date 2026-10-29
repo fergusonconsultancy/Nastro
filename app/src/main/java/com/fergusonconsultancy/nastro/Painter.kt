@@ -480,29 +480,30 @@ class Painter(ctx: Context) {
             spokes(c, gx, gy, Deck.GUIDE_R * 0.95f, Deck.guideAng, 3, 0x8C5A5E63.toInt())
             fill(0xFF6E7378.toInt()); c.drawCircle(gx, gy, 0.35f, p)
         }
-        // The head opening, cut into the foot edge
-        fill(0xFF0A0A0B.toInt()); r.set(-6.5f, 27.8f, 6.5f, CH / 2 + 0.2f); c.drawRoundRect(r, 0.6f, 0.6f, p)
-        val push = 0.65f * e
+        // The head opening, cut into the foot edge below the centre screw (screw ends at 28.6 mm)
+        val top = 28.9f; val bottom = CH / 2 + 0.2f
+        fill(0xFF0A0A0B.toInt()); r.set(-6.5f, top, 6.5f, bottom); c.drawRoundRect(r, 0.6f, 0.6f, p)
+        c.save(); r.set(-6.5f, top, 6.5f, bottom); c.clipRect(r)
+        val push = 0.35f * e
         // Pressure pad spring: a bronze leaf anchored at its ends, flexing as the pad is pushed
-        s.strokeWidth = 0.3f; s.color = 0xFFB08A4E.toInt()
-        path.reset(); path.moveTo(-5.2f, 28.3f); path.quadTo(0f, 28.9f - push * 1.4f, 5.2f, 28.3f); c.drawPath(path, s)
+        s.strokeWidth = 0.28f; s.color = 0xFFB08A4E.toInt()
+        path.reset(); path.moveTo(-5.4f, 29.15f); path.quadTo(0f, 29.55f - push * 1.6f, 5.4f, 29.15f); c.drawPath(path, s)
         // The pad: felt, pressed back by the tape
-        fill(0xFF6C6F68.toInt()); r.set(-2.1f, 28.9f - push, 2.1f, 29.9f - push); c.drawRoundRect(r, 0.25f, 0.25f, p)
+        fill(0xFF6C6F68.toInt()); r.set(-2.1f, 29.75f - push, 2.1f, 30.35f - push); c.drawRoundRect(r, 0.2f, 0.2f, p)
         // The tape across the opening: straight while the head is back, pressed into the pad by it
         fill(0xFF3A281E.toInt())
         path.reset()
-        path.moveTo(-6.5f, 30.2f); path.lineTo(-3f, 30.2f - push); path.lineTo(3f, 30.2f - push); path.lineTo(6.5f, 30.2f)
-        path.lineTo(6.5f, 30.7f); path.lineTo(3f, 30.7f - push); path.lineTo(-3f, 30.7f - push); path.lineTo(-6.5f, 30.7f); path.close()
+        path.moveTo(-6.5f, 30.4f); path.lineTo(-3f, 30.4f - push); path.lineTo(3f, 30.4f - push); path.lineTo(6.5f, 30.4f)
+        path.lineTo(6.5f, 30.85f); path.lineTo(3f, 30.85f - push); path.lineTo(-3f, 30.85f - push); path.lineTo(-6.5f, 30.85f); path.close()
         c.drawPath(path, p)
         // The head's face, seen in the opening as it arrives and presses the tape into the pad
-        val face = 30.7f - push + 1.7f * (1 - e)
-        if (face < CH / 2) {
-            c.save(); r.set(-6.5f, 27.8f, 6.5f, CH / 2 + 0.2f); c.clipRect(r)
+        val face = 30.85f - push + 1.7f * (1 - e)
+        if (face < bottom) {
             p.shader = LinearGradient(-4f, 0f, 4f, 0f, intArrayOf(0xFF9AA1A8.toInt(), 0xFFF1F3F5.toInt(), 0xFF8D949B.toInt()), null, Shader.TileMode.CLAMP)
-            r.set(-4f, face, 4f, CH / 2 + 2f); c.drawRoundRect(r, 0.9f, 0.9f, p); p.shader = null
-            fill(0xFF2B2F34.toInt()); c.drawRect(-0.12f, face, 0.12f, face + 1.4f, p)
-            c.restore()
+            r.set(-4f, face, 4f, bottom + 2f); c.drawRoundRect(r, 0.9f, 0.9f, p); p.shader = null
+            fill(0xFF2B2F34.toInt()); c.drawRect(-0.12f, face, 0.12f, face + 1.2f, p)
         }
+        c.restore()
     }
 
     // ---- the player ----------------------------------------------------------------------------------
