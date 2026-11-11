@@ -46,6 +46,7 @@ class MainActivity : Activity() {
         mix = MixtapeSheet(this) { id, deleted ->
             Library.refreshMixtapes(id, deleted)
             stage.libraryChanged()
+            stage.mixtapeSaved(if (deleted) null else id)
         }
         stage.onNewMixtape = { if (Library.loaded) mix.open(null) }
         stage.onEditMixtape = { t -> if (Library.loaded) mix.open(t) }

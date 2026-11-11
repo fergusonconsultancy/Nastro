@@ -301,7 +301,7 @@ class Painter(ctx: Context) {
         t.letterSpacing = 0f
     }
 
-    private fun handwrite(c: Canvas, text: String, x: Float, y: Float, size: Float, maxW: Float, color: Int,
+    internal fun handwrite(c: Canvas, text: String, x: Float, y: Float, size: Float, maxW: Float, color: Int,
                           align: Paint.Align = Paint.Align.LEFT) {
         t.typeface = hand; t.textSize = size; t.color = color; t.textAlign = align; t.letterSpacing = 0f
         t.shader = null; t.clearShadowLayer()
@@ -821,7 +821,7 @@ class Painter(ctx: Context) {
         'Q' to "abcdefm", 'R' to "abefGm", 'S' to "acdfG", 'T' to "ail", 'U' to "bcdef", 'V' to "efkj", 'W' to "bcefkm", 'X' to "hjkm",
         'Y' to "hjl", 'Z' to "adjk", '-' to "G", '\'' to "i", '/' to "jk", '&' to "adehjkm", '+' to "Gil",
     )
-    private val SEGS = mapOf(
+    internal val SEGS = mapOf(
         "a" to floatArrayOf(0f, 0f, 1f, 0f), "b" to floatArrayOf(1f, 0f, 1f, .5f), "c" to floatArrayOf(1f, .5f, 1f, 1f),
         "d" to floatArrayOf(0f, 1f, 1f, 1f), "e" to floatArrayOf(0f, .5f, 0f, 1f), "f" to floatArrayOf(0f, 0f, 0f, .5f),
         "g" to floatArrayOf(0f, .5f, .5f, .5f), "g2" to floatArrayOf(.5f, .5f, 1f, .5f),
@@ -829,7 +829,7 @@ class Painter(ctx: Context) {
         "k" to floatArrayOf(0f, 1f, .5f, .5f), "l" to floatArrayOf(.5f, 1f, .5f, .5f), "m" to floatArrayOf(1f, 1f, .5f, .5f),
     )
 
-    private fun litSegments(ch: Char): Set<String> {
+    internal fun litSegments(ch: Char): Set<String> {
         val code = SEG14[ch.uppercaseChar()] ?: return emptySet()
         val out = HashSet<String>()
         var q = 0
