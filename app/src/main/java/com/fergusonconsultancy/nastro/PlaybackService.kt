@@ -74,8 +74,9 @@ class PlaybackService : Service() {
         lastKey = key
 
         session.setMetadata(MediaMetadata.Builder()
-            .putString(MediaMetadata.METADATA_KEY_TITLE, cur.track?.title ?: t.album)
-            .putString(MediaMetadata.METADATA_KEY_ARTIST, t.artist)
+            // a mixtape's tracks carry their artist in the title for the readout; split them back out here
+            .putString(MediaMetadata.METADATA_KEY_TITLE, cur.track?.let { if (t.mix) Library.song(it.id)?.title else null } ?: cur.track?.title ?: t.album)
+            .putString(MediaMetadata.METADATA_KEY_ARTIST, if (t.mix) cur.track?.let { Library.song(it.id)?.artist } ?: "Mixtape" else t.artist)
             .putString(MediaMetadata.METADATA_KEY_ALBUM, t.album)
             .putLong(MediaMetadata.METADATA_KEY_DURATION, ((cur.track?.durSecs ?: 0.0) * 1000).toLong())
             .apply { t.art?.let { putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, it) } }

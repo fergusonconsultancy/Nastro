@@ -33,6 +33,8 @@ class Tape(
     val singles: Boolean = false,
     /** When it arrived on the phone, newest track first: for "newest" shelf order. */
     var added: Long = 0L,
+    /** A mixtape: songs of your own choosing, in your own order, under a name you wrote. */
+    val mix: Boolean = false,
 ) {
     /** Shelf order and the index letter: artist, ignoring a leading "The". */
     val sortKey: String = artist.lowercase().removePrefix("the ").trim()
@@ -53,7 +55,7 @@ class Tape(
         )
 
         fun build(albumId: Long, artist: String, album: String, raw: List<Triple<Long, String, Pair<Double, Int>>>,
-                  artId: Long = albumId, singles: Boolean = false): Tape? {
+                  artId: Long = albumId, singles: Boolean = false, shell: Shell? = null, mix: Boolean = false): Tape? {
             if (raw.isEmpty()) return null
             val durs = raw.map { it.third.first.coerceAtLeast(1.0) }
             val total = durs.sum()
@@ -81,20 +83,34 @@ class Tape(
                 need <= 3600 -> 120
                 else -> (Math.ceil(need / 900.0).toInt() * 30)
             }
-            val shell = Shells.ALL[Math.floorMod(albumId * 31 + album.hashCode(), Shells.ALL.size.toLong()).toInt()]
-            return Tape(albumId, artist, album, sa, sb, length * 30.0, length, shell, artId, singles)
+            val sh = shell ?: Shells.ALL[Math.floorMod(albumId * 31 + album.hashCode(), Shells.ALL.size.toLong()).toInt()]
+            return Tape(albumId, artist, album, sa, sb, length * 30.0, length, sh, artId, singles, mix = mix)
         }
     }
+}
+
+/** A song on the phone, for choosing onto a mixtape. */
+class Song(val id: Long, val title: String, val artist: String, val album: String, val durSecs: Double) {
+    val key: String = "$title $artist $album".lowercase()
 }
 
 /** Reads the albums on the phone and turns each into a tape. Runs off the main thread. */
 object Library {
     private val io = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
+    /** Mixtapes first (newest made first), then the albums in shelf order. */
     var tapes: List<Tape> = emptyList()
         private set
     var loaded = false
         private set
+    /** Every song on the phone, by artist, album and track: what a mixtape is chosen from. */
+    var songs: List<Song> = emptyList()
+        private set
+    private var songById: Map<Long, Song> = emptyMap()
+    private var albumTapes: List<Tape> = emptyList()
+
+    /** The blank at the head of the shelf: picking it starts a new mixtape. Never goes in the deck. */
+    val BLANK: Tape = Tape(Long.MIN_VALUE, "", "+ new mixtape", emptyList(), emptyList(), 1800.0, 60, Shells.ALL[1], mix = true)
 
     /** Settings that change the shelf (singles, order) rebuild it. */
     fun reload(ctx: Context, done: (List<Tape>) -> Unit) { loaded = false; load(ctx, done) }
@@ -102,13 +118,14 @@ object Library {
     fun load(ctx: Context, done: (List<Tape>) -> Unit) {
         val app = ctx.applicationContext
         io.execute {
-            val list = runCatching { query(app) }.getOrDefault(emptyList())
+            val (albums, all) = runCatching { query(app) }.getOrDefault(Pair(emptyList(), emptyList()))
             main.post {
-                tapes = list; loaded = true
-                done(list)
+                albumTapes = albums; songs = all; songById = all.associateBy { it.id }
+                tapes = mixtapes() + albums; loaded = true
+                done(tapes)
             }
             // Covers arrive after the shelf is up
-            for (t in list) {
+            for (t in albums) {
                 val bmp = runCatching { app.contentResolver.loadThumbnail(t.artUri, Size(512, 512), null) }.getOrNull()
                 if (bmp != null) main.post { t.art = bmp; Deck.notifyChanged() }
             }
@@ -117,7 +134,29 @@ object Library {
 
     fun find(albumId: Long): Tape? = tapes.firstOrNull { it.albumId == albumId }
 
-    private fun query(ctx: Context): List<Tape> {
+    fun song(id: Long): Song? = songById[id]
+
+    /**
+     * Mixtapes changed: rebuild them over the albums already read, without asking the phone again.
+     * A mixtape in the deck that was rewritten starts again from the top of side A; one that was
+     * thrown away leaves the deck for the next tape on the shelf.
+     */
+    fun refreshMixtapes(changedId: Long?, deleted: Boolean) {
+        tapes = mixtapes() + albumTapes
+        val inDeck = Deck.tape
+        if (changedId != null && inDeck?.albumId == changedId) {
+            val next = if (deleted) tapes.firstOrNull() else find(changedId)
+            if (next != null) Deck.reseat(next, fromTop = true)
+        } else Deck.relink()
+    }
+
+    private fun mixtapes(): List<Tape> = Mixtapes.all().sortedByDescending { it.created }.mapNotNull { m ->
+        // Each song keeps its artist on the label's track list, since a mixtape mixes them
+        val raw = m.tracks.mapNotNull { songById[it] }.map { s -> Triple(s.id, if (s.artist.isBlank() || s.artist == "<unknown>") s.title else "${s.title} - ${s.artist}", Pair(s.durSecs, 0)) }
+        Tape.build(m.id, "", m.name, raw, shell = Shells.byId(m.shell), mix = true)?.also { it.added = m.created }
+    }
+
+    private fun query(ctx: Context): Pair<List<Tape>, List<Song>> {
         val proj = arrayOf(
             MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.TRACK, MediaStore.Audio.Media.ALBUM_ID, MediaStore.Audio.Media.ALBUM,
@@ -165,7 +204,14 @@ object Library {
             "newest" -> out.sortWith(compareByDescending<Tape> { it.added }.thenBy { it.sortKey })
             else -> out.sortWith(compareBy<Tape> { it.sortKey }.thenBy { it.singles }.thenBy { it.album.lowercase() })
         }
-        return out
+        // Every song, for the mixtape editor: by artist (ignoring a leading "The"), album, then track
+        val all = ArrayList<Song>()
+        for ((_, rows) in byAlbum) for (r in rows) {
+            val artist = (r[5] as String).takeIf { it.isNotBlank() && it != "<unknown>" } ?: (r[6] as String?) ?: ""
+            all += Song(r[0] as Long, r[1] as String, artist, r[4] as String, (r[2] as Long) / 1000.0)
+        }
+        all.sortWith(compareBy<Song> { it.artist.lowercase().removePrefix("the ") }.thenBy { it.album.lowercase() })
+        return out to all
     }
 }
 
@@ -187,6 +233,7 @@ class Shell(
 )
 
 object Shells {
+    fun byId(id: String?): Shell? = ALL.firstOrNull { it.id == id }
     private fun c(v: Long) = v.toInt()
     val ALL = listOf(
         Shell("ferric", c(0xFF161616), 0f, "wide", c(0xFFECE8DF), "top", c(0xFFEFECE4), c(0xFFD0242C), c(0xFFEFECE4)),

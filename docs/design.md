@@ -105,3 +105,32 @@ Mechack: both screens would look better if the shell and the compartment used th
 - **Unfolded:** the right half is the compartment's metal to the screen's edges; the left half is the inside of the door to the edges, meeting at the crease. The shelf scrolls inside that panel.
 - **System bars** are transparent and the metal runs under them; the readout, keys and tapes keep clear of the status and navigation bars.
 - **Known trade-off:** on the light finishes (blue, grey) the white status icons sit on pale metal. Visconti, graphite and rosso are unaffected.
+
+## Fifth review, 11 Nov: every orientation, a deck with depth, mixtapes
+
+Mechack, from four screenshots: the player was cut off on the cover screen turned on its side; the open deck looked flat, a "paper copy" round a tape he loves; and he wanted mixtapes.
+
+**Orientation.**
+- *Cover screen on its side.* There was only an upright face, so turned sideways it was laid out to the screen's length and everything below the lens fell off the foot. It now has its own layout: the lid and lens on the left with the tape lying flat behind the glass, and a column on the right holding the readout, the keys and the switches (Hold, Mega Bass, Auto rev, the battery door). The volume wheel stays on the right edge.
+- *Open phone on its side.* The whole upright frame was turned a quarter onto the screen, so the type and the tape lay on their sides. Now the crease runs across: the deck takes the top half, tape lying flat with its label up and its open edge down at the hinge, readout and keys in a column on the right; the inside of the door, with the shelf, takes the bottom half. The door swings down on the crease when unfolding.
+- *Squat windows* (a split screen) shrink the upright face to fit rather than lose its foot.
+- The shelf takes as many columns as fit at a comfortable size: two on a half screen, four across the open phone on its side.
+
+**Depth in the open deck.** A real compartment is a hole in a machine, and the deck now draws it that way:
+- a raised lip of the lid's metal round the hole, chamfered down into it, held by four screws;
+- four walls falling to the floor: dark where they face away from the light (top, left), lit where they face it (bottom, right);
+- a pressed-steel floor with moulding grain, the chassis plate with its rib, lightening slots, spindle bosses, locating posts and screws; the lip's shadow falling into the hole; darkness gathering in its corners;
+- the cassette standing on its spindles with a deeper shadow;
+- the readout's housing standing on the body with a shadow, and the keys sunk into their own raised plate, screwed at each end;
+- the body's light falling off towards its edges, and a machined edge where the door's hinge meets it.
+The compartment keeps the shell and the heads clear of its walls, so the tape is about 13% smaller than before in the upright half; previously its label edge ran over the compartment's edge.
+
+**Mixtapes.** Songs of your choosing, in your order, on one tape under a name you write:
+- the first tape on the shelf is a blank in a clear shell labelled "+ new mixtape"; picking it opens the mixtape sheet;
+- the label is written on in biro (Caveat), and any of the nine shells can be chosen, drawn as the real shell with your name on it;
+- songs are found by title, artist or album and added in order; on the tape they can be moved up or down or taken off;
+- the tape fills as you go: a bar for each side shows every song as a length of tape and what is left blank. It goes onto the shortest tape that holds it, C60, C90 or C120, split at the song nearest half way, the same rule as every album;
+- mixtapes sit at the head of the shelf, newest first, ahead of the A–Z index. Its J-card in the shelf, while the tape is in the deck, is the label's colour with the name written along it;
+- hold a mixtape on the shelf to write on it again or throw it away (two taps). Rewriting the tape in the deck starts it from the top of side A; throwing it away loads the next tape;
+- the readout shows each song as "title - artist", since a mixtape mixes artists; the notification splits them back out;
+- saved as song ids, so a song that leaves the phone is simply skipped.

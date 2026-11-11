@@ -14,6 +14,8 @@ Every album on the phone is dubbed onto the shortest cassette that holds it (C60
 - **Printed switches.** Auto reverse, Mega Bass (the platform bass boost) and Hold. They brighten as your finger comes near.
 - **Blank skip.** At the end of a side the blank tape winds past, then auto reverse turns round or the deck stops.
 - **Every tape is where you left it.** Position and side are kept per album.
+- **Mixtapes.** Pick the blank at the head of the shelf, write its name, choose a shell and put songs on in your own order. It goes onto the shortest tape that holds them. Hold a mixtape on the shelf to change it or throw it away.
+- **Any way up.** Turned on its side, the cover screen lays the player out sideways and the open phone puts the deck above the shelf, everything upright.
 - **Opening the door does not stop the tape.** Choosing another tape does.
 - Headphones pulled out stop it. Lock screen, headset and notification controls drive the same deck.
 

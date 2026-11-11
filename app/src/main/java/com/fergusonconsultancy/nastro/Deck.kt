@@ -92,6 +92,7 @@ object Deck {
         if (::app.isInitialized) return
         app = ctx.applicationContext
         Prefs.init(app)
+        Mixtapes.init(app)
         Sfx.init(app)
         val p = prefs()
         autoRev = p.getBoolean("autoRev", true)
@@ -219,6 +220,7 @@ object Deck {
      * straight into the compartment, seats with a clunk and plays.
      */
     fun load(t: Tape, direct: Boolean) {
+        if (t === Library.BLANK) return
         if (hold) { onEvent?.invoke(Event.REFUSED); return }
         if (t === tape && door < 0.05f) { if (mode == Mode.STOP) press(Key.PLAY); return }
         save()
@@ -241,6 +243,15 @@ object Deck {
         v = 0.0; amsTarget = null; blank = false
         Audio.release()
         p.edit().putLong("tape", t.albumId).apply()
+    }
+
+    /** Put [t] in the deck in place of what is there, stopped; [fromTop] forgets where it was left. */
+    fun reseat(t: Tape, fromTop: Boolean) {
+        mode = Mode.STOP; amsTarget = null; blank = false; pending = null
+        if (fromTop) prefs().edit().remove("x_${t.albumId}").remove("b_${t.albumId}").remove("d_${t.albumId}").apply()
+        insert(t)
+        Sfx.update(0.0, false)
+        wake(); notifyChanged()
     }
 
     /** The shelf was rebuilt (a setting changed): keep the same tape in the deck, where it is. */

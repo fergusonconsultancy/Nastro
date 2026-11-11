@@ -12,6 +12,7 @@ import android.window.OnBackInvokedDispatcher
 class MainActivity : Activity() {
     private lateinit var stage: StageView
     private lateinit var sheet: SettingsSheet
+    private lateinit var mix: MixtapeSheet
 
     private val audioPermission =
         if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
@@ -26,6 +27,7 @@ class MainActivity : Activity() {
         window.isStatusBarContrastEnforced = false
         window.attributes = window.attributes.apply { layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES }
         window.setDecorFitsSystemWindows(false)
+        @Suppress("DEPRECATION") window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
 
         stage = StageView(this)
         stage.setOnApplyWindowInsetsListener { v, insets ->
@@ -39,6 +41,18 @@ class MainActivity : Activity() {
             Library.reload(this) { Deck.relink(); stage.libraryChanged() }
         }
         stage.onOpenSettings = { sheet.show() }
+        // Mixtapes: the blank at the head of the shelf makes one; holding one writes on it again
+        mix = MixtapeSheet(this) { id, deleted ->
+            Library.refreshMixtapes(id, deleted)
+            stage.libraryChanged()
+        }
+        stage.onNewMixtape = { if (Library.loaded) mix.open(null) }
+        stage.onEditMixtape = { t -> if (Library.loaded) mix.open(t) }
+        mix.setOnApplyWindowInsetsListener { v, insets ->
+            val b = insets.getInsets(WindowInsets.Type.systemBars())
+            val ime = insets.getInsets(WindowInsets.Type.ime())
+            v.setPadding(b.left, b.top, b.right, maxOf(b.bottom, ime.bottom)); insets
+        }
         sheet.setOnApplyWindowInsetsListener { v, insets ->
             val b = insets.getInsets(WindowInsets.Type.systemBars())
             v.setPadding(b.left, b.top, b.right, b.bottom); insets
@@ -46,11 +60,12 @@ class MainActivity : Activity() {
         val root = android.widget.FrameLayout(this)
         root.addView(stage)
         root.addView(sheet)
+        root.addView(mix)
         setContentView(root)
 
         if (Build.VERSION.SDK_INT >= 33) {
             onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT) {
-                if (sheet.showing) sheet.hide() else if (!stage.back()) finish()
+                if (mix.showing) mix.cancel() else if (sheet.showing) sheet.hide() else if (!stage.back()) finish()
             }
         }
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -61,7 +76,7 @@ class MainActivity : Activity() {
 
     @Deprecated("Pre-33 back handling")
     override fun onBackPressed() {
-        if (sheet.showing) sheet.hide() else if (!stage.back()) @Suppress("DEPRECATION") super.onBackPressed()
+        if (mix.showing) mix.cancel() else if (sheet.showing) sheet.hide() else if (!stage.back()) @Suppress("DEPRECATION") super.onBackPressed()
     }
 
     private fun start() {

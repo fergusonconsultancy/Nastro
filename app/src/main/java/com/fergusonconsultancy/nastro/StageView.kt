@@ -39,6 +39,10 @@ class StageView(ctx: Context) : View(ctx) {
     var needsPermission = false
     var onAskPermission: (() -> Unit)? = null
     var onOpenSettings: (() -> Unit)? = null
+    /** The blank tape at the head of the shelf: make a mixtape. */
+    var onNewMixtape: (() -> Unit)? = null
+    /** A mixtape held on the shelf: write on it again. */
+    var onEditMixtape: ((Tape) -> Unit)? = null
     private val audio = ctx.getSystemService(android.media.AudioManager::class.java)
     private var volAt = 0L
     private val live = Painter.Live()
@@ -113,8 +117,9 @@ class StageView(ctx: Context) : View(ctx) {
         // near-square inner screen could put on the wrong side of a ratio
         val nowOpen = onMainScreen(w, h)
         // The crease runs down the inner screen's upright centre; turned on its side it runs
-        // across. Then the open Walkman turns with the phone, as a real one would
-        turned = nowOpen && (display?.rotation == android.view.Surface.ROTATION_90 || display?.rotation == android.view.Surface.ROTATION_270)
+        // across. Then the open Walkman is laid out across it, everything still upright (11 Nov 2026:
+        // turning the whole frame sideways left the type and the tape on their sides)
+        stacked = nowOpen && w > h
         if (nowOpen && !open && oldw != 0) {
             // Unfolding: the door pops on its spring and swings open over the left half
             swing = if (Prefs.doorSwing) 0f else 1f; swingFrom = SystemClock.uptimeMillis()
@@ -140,17 +145,15 @@ class StageView(ctx: Context) : View(ctx) {
     }
 
     // ---- turned on its side ---------------------------------------------------------------------
-    // Everything is laid out and drawn in an upright frame (crease down its middle); when the
-    // phone is on its side the frame is turned a quarter onto the screen and touches are turned
-    // back into it. fw and fh are the frame's size; pl, pt, pr, pb its insets.
-    private var turned = false
-    private val fw get() = if (turned) height else width
-    private val fh get() = if (turned) width else height
-    private val pl get() = if (turned) paddingTop else paddingLeft
-    private val pt get() = if (turned) paddingRight else paddingTop
-    private val pr get() = if (turned) paddingBottom else paddingRight
-    private val pb get() = if (turned) paddingLeft else paddingBottom
-    private val toFrame = android.graphics.Matrix()
+    // Open and on its side, the crease runs across the screen: the deck takes the top half and the
+    // inside of the door, with the shelf, the bottom half.
+    private var stacked = false
+    private val fw get() = width
+    private val fh get() = height
+    private val pl get() = paddingLeft
+    private val pt get() = paddingTop
+    private val pr get() = paddingRight
+    private val pb get() = paddingBottom
 
     private fun layoutAll() {
         val L = pl.toFloat(); val T = pt.toFloat()
@@ -160,7 +163,15 @@ class StageView(ctx: Context) : View(ctx) {
         // compartment on the right, meeting at the crease), and folded, the face fills the cover screen.
         // The parts keep clear of the camera and system bars; the metal runs to every edge.
         val Wf = fw.toFloat(); val Hf = fh.toFloat()
-        if (open) {
+        if (open && stacked) {
+            val half = Hf / 2f
+            val g = dp(10f)
+            val bleed = RectF(0f, 0f, Wf, half)
+            deck = PlayerGeom.bay(L + g, T + g, W - g * 2, half - T - g * 2, bleed)
+            face = PlayerGeom.face(L + g, T + g, W - g * 2, half - T - g * 2, bleed)
+            shelfBg.set(0f, half, Wf, Hf)
+            shelfArea.set(L + dp(12f), half + dp(6f), L + W - dp(12f), T + H - dp(6f))
+        } else if (open) {
             val half = Wf / 2f
             val g = dp(10f)
             val bleed = RectF(half, 0f, Wf, Hf)
@@ -181,9 +192,18 @@ class StageView(ctx: Context) : View(ctx) {
         layoutShelf()
     }
 
+    /** The shelf: the blank tape for a new mixtape, then the mixtapes, then every album. */
+    private var shelfSrc: List<Tape>? = null
+    private var shelfList: List<Tape> = emptyList()
+    private fun shelfTapes(): List<Tape> {
+        if (shelfSrc !== Library.tapes) { shelfSrc = Library.tapes; shelfList = listOf(Library.BLANK) + Library.tapes }
+        return shelfList
+    }
+
     private fun layoutShelf() {
-        val tapes = Library.tapes
-        cols = if (shelfArea.width() > dp(340f)) 2 else 1
+        val tapes = shelfTapes()
+        // as many columns as fit at a comfortable size: two on a half screen, more across the open phone on its side
+        cols = (shelfArea.width() / dp(175f)).toInt().coerceIn(1, 6)
         // room on the hinge side for the index
         val gap = max(dp(10f), shelfArea.width() * 0.035f)
         rail.set(shelfArea.right - dp(30f), shelfArea.top + dp(24f), shelfArea.right - dp(2f), shelfArea.bottom - dp(24f))
@@ -220,7 +240,9 @@ class StageView(ctx: Context) : View(ctx) {
     private fun buildIndex() {
         val map = LinkedHashMap<Char, Int>()
         // Newest-first has no alphabet to index
-        if (Prefs.order != "newest") Library.tapes.forEachIndexed { i, t ->
+        // Mixtapes and the blank sit at the head of the shelf, outside the alphabet
+        if (Prefs.order != "newest") shelfTapes().forEachIndexed { i, t ->
+            if (t.mix) return@forEachIndexed
             val ch = if (Prefs.order == "album") t.album.lowercase().removePrefix("the ").firstOrNull()?.uppercaseChar()?.takeIf { it in 'A'..'Z' } ?: '#' else t.indexLetter
             if (ch !in map) map[ch] = i
         }
@@ -252,13 +274,7 @@ class StageView(ctx: Context) : View(ctx) {
     }
 
     // ---- drawing -------------------------------------------------------------------------------
-    override fun onDraw(c: Canvas) {
-        if (!turned) { scene(c); return }
-        val k = c.save()
-        c.translate(width.toFloat(), 0f); c.rotate(90f)
-        scene(c)
-        c.restoreToCount(k)
-    }
+    override fun onDraw(c: Canvas) = scene(c)
 
     private fun scene(c: Canvas) {
         val now = SystemClock.uptimeMillis()
@@ -310,7 +326,7 @@ class StageView(ctx: Context) : View(ctx) {
                 val k0 = sl.rect.width() / (PlayerGeom.CW + 4); val k1 = G.k
                 c.save()
                 c.translate(lerp(fx, G.tx, tt), lerp(fy, G.ty, tt) - sin(tt * PI).toFloat() * dp(30f))
-                c.rotate(90f * tt)
+                c.rotate(G.rot * tt)
                 val kk = lerp(k0, k1, tt) * (1 + sin(tt * PI).toFloat() * 0.06f)
                 c.scale(kk, kk)
                 painter.cassette(c, pend, false, 1f, shadow = 6f)
@@ -318,7 +334,11 @@ class StageView(ctx: Context) : View(ctx) {
             }
         }
         c.restore()
-        if (open) {
+        if (open && stacked) {
+            val cy = fh / 2f
+            val p = Paint().apply { shader = android.graphics.LinearGradient(0f, cy - dp(6f), 0f, cy + dp(6f), intArrayOf(0, 0x12FFFFFF, 0), null, android.graphics.Shader.TileMode.CLAMP) }
+            c.drawRect(0f, cy - dp(6f), fw.toFloat(), cy + dp(6f), p)
+        } else if (open) {
             // the crease
             val cx = fw / 2f
             val p = Paint().apply { shader = android.graphics.LinearGradient(cx - dp(6f), 0f, cx + dp(6f), 0f, intArrayOf(0, 0x12FFFFFF, 0), null, android.graphics.Shader.TileMode.CLAMP) }
@@ -332,22 +352,39 @@ class StageView(ctx: Context) : View(ctx) {
 
     /** Unfolding is opening the door: the face swings on the crease out over the left half, and its inside becomes the shelf. */
     private fun drawSwing(c: Canvas, G: PlayerGeom, now: Long, lifting: Boolean) {
-        val cx = fw / 2f
         val th = easeInOut(swing) * PI
         val cs = cos(th).toFloat()
         val shade = Paint()
         painter.bay(c, G, live)
-        shade.color = Color.BLACK.a(0.55f * (1 - swing)); c.drawRect(cx, 0f, fw.toFloat(), fh.toFloat(), shade)
+        val W = fw.toFloat(); val H = fh.toFloat()
+        if (stacked) {
+            // the crease runs across: the face over the top half swings down onto the bottom half
+            val cy = H / 2f
+            shade.color = Color.BLACK.a(0.55f * (1 - swing)); c.drawRect(0f, 0f, W, cy, shade)
+            c.save()
+            c.translate(0f, cy); c.scale(1f, max(0.001f, abs(cs))); c.translate(0f, -cy)
+            if (cs > 0) {
+                face?.let { painter.face(c, it, live) }
+                shade.color = Color.BLACK.a(0.5f * (1 - cs)); c.drawRect(0f, 0f, W, cy, shade)
+            } else {
+                drawShelf(c)
+                shade.color = Color.BLACK.a(0.5f * (1 + cs)); c.drawRect(0f, cy, W, H, shade)
+            }
+            c.restore()
+            return
+        }
+        val cx = W / 2f
+        shade.color = Color.BLACK.a(0.55f * (1 - swing)); c.drawRect(cx, 0f, W, H, shade)
         c.save()
         c.translate(cx, 0f); c.scale(max(0.001f, abs(cs)), 1f); c.translate(-cx, 0f)
         if (cs > 0) {
             // the face, still shut over the compartment, turning away
             face?.let { painter.face(c, it, live) }
-            shade.color = Color.BLACK.a(0.5f * (1 - cs)); c.drawRect(cx, 0f, fw.toFloat(), fh.toFloat(), shade)
+            shade.color = Color.BLACK.a(0.5f * (1 - cs)); c.drawRect(cx, 0f, W, H, shade)
         } else {
             // the inside of the door coming down onto the left half
             drawShelf(c)
-            shade.color = Color.BLACK.a(0.5f * (1 + cs)); c.drawRect(0f, 0f, cx, fh.toFloat(), shade)
+            shade.color = Color.BLACK.a(0.5f * (1 + cs)); c.drawRect(0f, 0f, cx, H, shade)
         }
         c.restore()
     }
@@ -400,9 +437,9 @@ class StageView(ctx: Context) : View(ctx) {
     private var wheelFrom: Pair<Float, Float>? = null           // y, volume
 
     private fun hub(G: PlayerGeom, left: Boolean): Pair<Float, Float> {
-        // shell (sx, sy) after rotate(+90°): screen = (-sy, sx) × k; the tape's open edge faces the hinge
-        val sx = if (left) -21.25f else 21.25f
-        return Pair(G.tx - (-2f) * G.k, G.ty + sx * G.k)
+        // the hub's centre in the shell's millimetres, turned onto the screen as the tape is drawn
+        val q = G.at(if (left) -21.25f else 21.25f, -2f)
+        return Pair(q.x, q.y)
     }
 
     private fun RectF.near(x: Float, y: Float, pad: Float) = x > left - pad && x < right + pad && y > top - pad && y < bottom + pad
@@ -415,12 +452,18 @@ class StageView(ctx: Context) : View(ctx) {
     }
 
     @SuppressLint("ClickableViewAccessibility")
-    override fun onTouchEvent(e: MotionEvent): Boolean {
-        if (!turned) return touch(e)
-        // Back into the upright frame: the inverse of the quarter turn used to draw it
-        toFrame.reset(); toFrame.setRotate(-90f); toFrame.postTranslate(0f, width.toFloat())
-        val f = MotionEvent.obtain(e); f.transform(toFrame)
-        return try { touch(f) } finally { f.recycle() }
+    override fun onTouchEvent(e: MotionEvent): Boolean = touch(e)
+
+    // Holding a mixtape on the shelf opens it to write on again
+    private var holdSlot: Painter.Slot? = null
+    private val longPress = Runnable {
+        val sl = holdSlot ?: return@Runnable
+        holdSlot = null
+        if ((shelfFrom?.third ?: 99f) < dp(8f)) {
+            shelfFrom = null; vt?.recycle(); vt = null
+            haptic(HapticFeedbackConstants.LONG_PRESS)
+            onEditMixtape?.invoke(sl.tape)
+        }
     }
 
     private fun touch(e: MotionEvent): Boolean {
@@ -464,6 +507,9 @@ class StageView(ctx: Context) : View(ctx) {
                 if (shelfArea.contains(x, y) && (open || view > 0.5f)) {
                     shelfFrom = Triple(y, shelfScroll, 0f)
                     vt?.recycle(); vt = VelocityTracker.obtain().also { it.addMovement(e) }
+                    holdSlot = slots.firstOrNull { it.rect.contains(x, y) && it.tape.mix && it.tape !== Library.BLANK }
+                    removeCallbacks(longPress)
+                    if (holdSlot != null) postDelayed(longPress, 480)
                     return true
                 }
                 if (!open && view > 0.5f) { back(); return true }
@@ -496,8 +542,9 @@ class StageView(ctx: Context) : View(ctx) {
                 if (wind != null) { wind = null; Deck.dragging = false; if (wasPlaying) Deck.press(Deck.Key.PLAY) }
                 swipeFrom?.let { (x0, y0) ->
                     val dx = x - x0; val dy = y - y0
-                    // the tape stands upright in the window, so turning it over is a sideways swipe
-                    if (abs(dx) > dp(40f) && abs(dx) > abs(dy) * 1.3f) Deck.turnOver()
+                    // upright in the window, turning the tape over is a sideways swipe; lying flat, an upward or downward one
+                    val (along, across) = if (G.wide) abs(dy) to abs(dx) else abs(dx) to abs(dy)
+                    if (along > dp(40f) && along > across * 1.3f) Deck.turnOver()
                 }
                 swipeFrom = null
                 shelfFrom?.let { (_, _, mv) ->
@@ -510,6 +557,7 @@ class StageView(ctx: Context) : View(ctx) {
                     }
                 }
                 shelfFrom = null; vt?.recycle(); vt = null
+                removeCallbacks(longPress); holdSlot = null
                 pressed?.let { pressedAt = SystemClock.uptimeMillis() - 60 }
                 invalidate()
             }
@@ -518,6 +566,7 @@ class StageView(ctx: Context) : View(ctx) {
     }
 
     private fun pick(sl: Painter.Slot) {
+        if (sl.tape === Library.BLANK) { Sfx.play(Sfx.S.WIND_KEY, 0.5f); onNewMixtape?.invoke(); return }
         val i = sl.index
         // Membrane: the tapes either side lean into the gap it leaves, nearest most
         for (j in lean.indices) {
