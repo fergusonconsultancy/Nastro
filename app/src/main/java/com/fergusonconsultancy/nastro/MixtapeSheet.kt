@@ -216,7 +216,7 @@ class MixtapeSheet(ctx: Context, private val done: (id: Long, deleted: Boolean) 
 
     private fun move(i: Int, by: Int) {
         val j = i + by
-        if (j !in chosen.indices) return
+        if (i !in chosen.indices || j !in chosen.indices) return
         val t = chosen[i]; chosen[i] = chosen[j]; chosen[j] = t
         refresh()
     }
@@ -228,7 +228,8 @@ class MixtapeSheet(ctx: Context, private val done: (id: Long, deleted: Boolean) 
             Library.songs.filter { s -> words.all { s.key.contains(it) } }
         }
         songAdapter.notifyDataSetChanged()
-        songsList.setSelection(0)
+        // back to the top of the results; with no results there is no top (11 Nov 2026 crash)
+        if (found.isNotEmpty()) songsList.setSelection(0)
         refreshEmpty()
     }
 
@@ -358,8 +359,8 @@ class MixtapeSheet(ctx: Context, private val done: (id: Long, deleted: Boolean) 
 
     private val tapeAdapter = object : BaseAdapter() {
         override fun getCount() = chosen.size
-        override fun getItem(i: Int) = chosen[i]
-        override fun getItemId(i: Int) = chosen[i]
+        override fun getItem(i: Int) = chosen.getOrNull(i)
+        override fun getItemId(i: Int) = chosen.getOrNull(i) ?: -1L
         override fun getView(i: Int, convert: View?, parent: ViewGroup?): View {
             val r = (convert?.tag as? Row) ?: row()
             val s = Library.song(chosen[i])
@@ -370,7 +371,7 @@ class MixtapeSheet(ctx: Context, private val done: (id: Long, deleted: Boolean) 
             r.tools.removeAllViews()
             r.tools.addView(tool("▲") { move(i, -1) }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(4) })
             r.tools.addView(tool("▼") { move(i, 1) }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(4) })
-            r.tools.addView(tool("✕") { chosen.removeAt(i); refresh() }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(4) })
+            r.tools.addView(tool("✕") { if (i in chosen.indices) { chosen.removeAt(i); refresh() } }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(4) })
             r.mark.visibility = View.GONE
             r.num.visibility = View.VISIBLE
             return r.root
@@ -379,8 +380,8 @@ class MixtapeSheet(ctx: Context, private val done: (id: Long, deleted: Boolean) 
 
     private val songAdapter = object : BaseAdapter() {
         override fun getCount() = found.size
-        override fun getItem(i: Int) = found[i]
-        override fun getItemId(i: Int) = found[i].id
+        override fun getItem(i: Int) = found.getOrNull(i)
+        override fun getItemId(i: Int) = found.getOrNull(i)?.id ?: -1L
         override fun getView(i: Int, convert: View?, parent: ViewGroup?): View {
             val r = (convert?.tag as? Row) ?: row()
             val s = found[i]
