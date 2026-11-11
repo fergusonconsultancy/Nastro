@@ -19,6 +19,7 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Crash.install(this)
         Deck.init(this)
         // Full-bleed: the player's metal runs under the status and navigation bars
         window.statusBarColor = android.graphics.Color.TRANSPARENT
@@ -72,6 +73,7 @@ class MainActivity : Activity() {
             // Asked alongside music access on first run, so the tape can carry on with the screen off
         }
         start()
+        Crash.report(this)
     }
 
     @Deprecated("Pre-33 back handling")

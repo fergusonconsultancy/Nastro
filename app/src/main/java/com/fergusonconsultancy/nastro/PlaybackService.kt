@@ -36,6 +36,7 @@ class PlaybackService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        Crash.install(this)
         Deck.init(this)
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL, "Playing tape", NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) }
