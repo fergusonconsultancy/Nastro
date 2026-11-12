@@ -90,6 +90,7 @@ class StageView(ctx: Context) : View(ctx) {
         hifi.onEditMixtape = { t -> onEditMixtape?.invoke(t) }
         hifi.onSettings = { onOpenSettings?.invoke() }
         hifi.onHaptic = { k -> haptic(k) }
+        hifi.onClunk = { clunk() }
         hifi.volume = { volume() }
         hifi.setVolume = { f -> setVolume(f) }
         Deck.onEvent = { e ->
@@ -104,7 +105,25 @@ class StageView(ctx: Context) : View(ctx) {
     }
 
     override fun onAttachedToWindow() { super.onAttachedToWindow(); Deck.listen(changed); Prefs.listen(changed) }
-    override fun onDetachedFromWindow() { Deck.unlisten(changed); Prefs.unlisten(changed); super.onDetachedFromWindow() }
+    override fun onDetachedFromWindow() { Deck.unlisten(changed); Prefs.unlisten(changed); hingeOff(); super.onDetachedFromWindow() }
+
+    // ---- the hinge (12 Nov 2026): its angle opens the hi-fi's doors as the phone unfolds ---------
+    private val sensors = ctx.getSystemService(android.hardware.SensorManager::class.java)
+    private val hingeSensor = sensors?.getDefaultSensor(android.hardware.Sensor.TYPE_HINGE_ANGLE)
+    private val hingeListener = object : android.hardware.SensorEventListener {
+        override fun onSensorChanged(e: android.hardware.SensorEvent) { hifi.hinge = e.values[0]; if (open) invalidate() }
+        override fun onAccuracyChanged(s: android.hardware.Sensor?, a: Int) {}
+    }
+    private var hingeOn = false
+    private fun hingeOff() { if (hingeOn) { sensors?.unregisterListener(hingeListener); hingeOn = false } }
+
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(visibility)
+        // listen only while Nastro is on screen
+        if (visibility == VISIBLE && hingeSensor != null && !hingeOn) {
+            hingeOn = sensors?.registerListener(hingeListener, hingeSensor, android.hardware.SensorManager.SENSOR_DELAY_UI) == true
+        } else if (visibility != VISIBLE) hingeOff()
+    }
 
     private fun clunk() {
         shake = 1f
@@ -140,8 +159,9 @@ class StageView(ctx: Context) : View(ctx) {
         if (nowOpen && !open && oldw != 0) {
             // Unfolding: home to the hi-fi, which comes on as you open it
             swing = if (Prefs.doorSwing) 0f else 1f; swingFrom = SystemClock.uptimeMillis(); shelfOut = false; shelfT = 0f
+            hifi.unfolded()
             Deck.doorShutQuietly(); view = 0f; viewTarget = 0f
-            Sfx.play(Sfx.S.DOOR_OPEN, 0.8f)
+            // the deck's doors make their own sound as the hinge opens them
         } else if (!nowOpen && open) {
             // Folding: the door has shut; the face appears with the clunk of the catch
             swing = 1f; view = 0f; viewTarget = 0f
@@ -555,7 +575,7 @@ class StageView(ctx: Context) : View(ctx) {
         }
         if (open) {
             // out of the pulled-out shelf and into deck 1; the shelf slides back into its drawer
-            hifi.flightFrom.set(sl.rect)
+            hifi.flightFrom.set(sl.rect); hifi.seat1()
             shelfOut = false
         }
         Deck.load(sl.tape, direct = open)

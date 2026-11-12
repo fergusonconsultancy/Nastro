@@ -157,3 +157,15 @@ Mechack: given the Fold 8 Ultra's shape, would a stereo work better unfolded? Ag
 - *Power on:* unfolding brings the stack up from dark over 750 ms (the "door swing" setting now governs this).
 
 **Either way up.** The inner screen is nearly square whichever way it is held, so one layout serves both, scaled to fit with the speakers either side.
+
+## Seventh review, 12 Nov: the hinge opens the deck
+
+Mechack: the cassette doors could open with the hinge itself, so unfolding the phone opens the deck. Chosen (of three): **open when flat**.
+
+- The phone's hinge angle sensor (Android's hinge angle sensor, which the Fold provides; general knowledge, to be confirmed on his phone) drives both doors: half open, half open; flat, fully open at 38°, the swing of a front-loading door. Below about 20° the inner screen is dark anyway.
+- A front-loading door is hinged at its foot, so its top comes down and towards you and widens as it opens; the tape rides in the holder on its back, still seen through the window. Behind it the well appears: the two spindles the hubs drop onto, the head and capstans at its foot, and the door's shadow falling back into it. Tilted up, the door's face catches the room's light.
+- Play, or a tap on an open door, shuts it with a clunk. Deck 1's eject key opens its door again (with it already open, it pulls out the shelf); deck 2's eject does the same for its door (open, it rewrites the mixtape). A tape flown in from the drawer or the shelf has its door close over it as it seats.
+- Folding back from flat hands the doors to the hinge again; a door shut while the phone is half open stays shut.
+- The tape keeps playing with the doors open, as the Walkman's did with its door open (friction otherwise).
+- Phones without a hinge sensor open the doors over the 750 ms power-on instead.
+- The doors make their own sound as they fall open, replacing the old unfolding sound.
