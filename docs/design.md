@@ -152,3 +152,17 @@ Mechack: back to option 1, the Walkman on both screens. What he wants is the ope
 **The inside of the door** is the back of the face: the face's own brushed metal runs round the rim, a moulded panel steps down inside it with a chamfer and the rim's shadow, screwed through the outer rim, with the moulded groove on the hinge side where the index lives. The shelf is kept on it.
 
 Phone on its side: the same, the body above the crease with the battery bay beside the tape, the door below, the knuckles across.
+
+## Eighth review, 13–14 Nov: life size, light in the hand, the AA, the mechanism, carrying a tape
+
+Mechack, from the first build on his Fold: the finish is loved but reads a little flat, the player meeting the phone's bezel artificially, with little emotion; the tape too small, with dead space round it (it should look life-size, on both screens); the battery has no purpose; more mechanism, and its relationship to the tape; and dragging a tape from the shelf into the deck would be more analogue. The repo moved to cerniera-studio/Nastro.
+
+**Life size.** The tape is drawn at its real size, read from the screen's own pixels per millimetre, wherever it fits. Open, the compartment is cut to it as a real Walkman's is: 1.6 mm clear round the shell, the head assembly's 7.5 mm along its open edge, then the AA bay, the pair centred in the body. Folded, the controls give up a little height so the lid grows, and the hubs show behind the lens at their real 42.5 mm apart where the screen allows.
+
+**Light in the hand.** Anodised metal is never still in the hand. The phone's gravity sensor moves the light: the brushing's streak, the lid's sheen, the lens's glare and the cassette's glazing slide as the phone tilts. Only the change counts; the rest position follows the hand over a few seconds, so however it is held the light sits upper left until it moves. Round the whole screen, following the glass's own corner radius, the metal now turns down under the bezel: a soft shade at the edge and a thin machined chamfer just inside it, lit on the side the light comes from. The phone's frame reads as the Walkman's edge, not a frame round a picture.
+
+**The AA is the way in.** Folded, the settings are behind the battery door; open, they are under the battery itself: tap the AA and it springs up on its coil, its shadow spreading, and the settings open. SETTINGS has gone from the shelf.
+
+**The mechanism**, drawn now in the shell's own millimetres so each part meets the tape where a real one does: the head's face in the head opening pressing the tape into the pad; the capstan up through the shell's capstan hole behind the tape; the pinch roller on a pressed arm, swung on a pivot screw and pulled by its spring, coming in through its notch to press the tape against the capstan; the head plate screwed down on its slots, the head on its azimuth screw with tape-guide forks either side, its amber flex running away. Inside the shell the tape's path is drawn as the real one runs: from each pack to the guide roller in its corner, round it, and along the open edge (seen through clear shells).
+
+**Carrying a tape.** Open, hold a tape on the shelf, or upright slide it sideways off the shelf towards the deck, and it comes away in your fingers; it grows to life size and turns to lie as the compartment holds it as it nears the hole; let go over the hole and it falls onto the spindles. Let go elsewhere and it goes back to its place. A tap still loads it; holding a mixtape and letting go unmoved still opens it to write on.
