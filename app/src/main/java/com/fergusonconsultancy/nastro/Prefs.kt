@@ -35,6 +35,17 @@ object Prefs {
     var doorSwing: Boolean get() = b("doorSwing", true); set(v) = put("doorSwing", v)
     var haptics: Boolean get() = b("haptics", true); set(v) = put("haptics", v)
     var singles: Boolean get() = b("singles", true); set(v) = put("singles", v)
+    /**
+     * How big the tape can be drawn, as a fraction of its real size, on each screen's upright
+     * layout (14 Nov 2026). The two screens share the smaller, so the tape behind the cover's lens
+     * and the tape in the open compartment are the same physical size, as one tape would be.
+     */
+    fun fit(screen: String): Float = if (::sp.isInitialized) sp.getFloat("fit_$screen", 0f) else 0f
+    fun setFit(screen: String, v: Float) {
+        if (!::sp.isInitialized || kotlin.math.abs(fit(screen) - v) < 0.004f) return
+        sp.edit().putFloat("fit_$screen", v).apply()
+    }
+
     /** artist, album or newest */
     var order: String get() = s("order", "artist"); set(v) = put("order", v)
 }

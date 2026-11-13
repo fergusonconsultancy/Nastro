@@ -141,12 +141,13 @@ class PlayerGeom private constructor(val kind: Kind, val x: Float, val w: Float)
         private fun faceTallFit(x: Float, y: Float, w: Float, h: Float, bleed: RectF? = null, mm: Float = 0f): PlayerGeom = PlayerGeom(Kind.FACE, x, w).apply {
             // 14 Nov 2026: the controls give up a little height so the lid, and the tape behind its lens, can
             // grow to the real thing's size: the hubs 42.5 mm apart, as in your hand
-            val lidH = (h - 0.86f * w).coerceIn(0.8f * w, if (bleed != null) 2.2f * w else 1.5f * w)
-            this.h = 0.86f * w + lidH
+            // 14 Nov 2026, Mechack: the readout up, the keys and switches down, the space between to the lid
+            val lidH = (h - 0.75f * w).coerceIn(0.8f * w, if (bleed != null) 2.3f * w else 1.5f * w)
+            this.h = 0.75f * w + lidH
             this.y = y + (h - this.h) / 2
             radius = if (bleed != null) 0f else w * 0.12f
             body = bleed?.let { RectF(it) } ?: RectF(x, this.y, x + w, this.y + this.h)
-            lcd = RectF(x + 0.07f * w, this.y + 0.06f * w, x + 0.93f * w, this.y + 0.27f * w)
+            lcd = RectF(x + 0.07f * w, this.y + 0.015f * w, x + 0.93f * w, this.y + 0.225f * w)
             val ld = RectF(x + 0.045f * w, lcd.bottom + 0.045f * w, x + 0.955f * w, lcd.bottom + 0.045f * w + lidH)
             lid = ld
             k = min(ld.height() * 0.74f / 74f, ld.width() * 0.62f / 30f).let { if (mm > 0f) min(it, mm) else it }
@@ -181,8 +182,8 @@ class PlayerGeom private constructor(val kind: Kind, val x: Float, val w: Float)
         // compartment is barely bigger than the cassette, so this one is too: the tape at its real size
         // (the screen's own pixels per millimetre) where it fits, the hole closing round it with the
         // head assembly along its open edge, the AA bay below, the pair centred in the body.
-        private const val CLEAR = 1.6f      // mm round the shell
-        private const val HEADS = 7.5f      // mm of head plate, pinch roller arm and capstan beyond the shell's foot
+        private const val CLEAR = 1.2f      // mm round the shell
+        private const val HEADS = 6.4f      // mm of head plate, pinch roller arm and capstan beyond the shell's foot
         private const val CELL = 20.5f      // mm: the AA (14.5) and its clearance
         private const val GAP = 4f          // mm of body between the two holes
         private const val LIP = 2.6f        // mm: each hole's raised lip
@@ -194,15 +195,19 @@ class PlayerGeom private constructor(val kind: Kind, val x: Float, val w: Float)
             body = bleed?.let { RectF(it) } ?: RectF(x, y, x + w, y + h)
             val cwMm = CH + HEADS + CLEAR * 2; val chMm = CW + CLEAR * 2
             val groupMm = chMm + GAP + LIP * 4 + CELL
-            var kk = min((w * 0.97f) / (cwMm + LIP * 2), (h * 0.97f) / groupMm)
+            // the width is what limits the tape upright, so the hole uses the body's whole width, edge to edge
+            val bw = (bleed?.width() ?: w) * 0.975f
+            var kk = min(bw / (cwMm + LIP * 2), (h * 0.97f) / groupMm)
             if (mm > 0f) kk = min(kk, mm)
             k = kk
-            val top = y + (h - (groupMm - LIP * 2) * k) / 2
-            val cx = x + w / 2
+            // 14 Nov 2026, Mechack: the AA bay down at the foot; the compartment centred in the rest
+            val cx = bleed?.centerX() ?: (x + w / 2)
+            val cellTop = y + h - (CELL + LIP) * k
+            val room = cellTop - (GAP + LIP * 2) * k - y
+            val top = y + max(LIP * k, (room - chMm * k) / 2)
             val c = RectF(cx - cwMm * k / 2, top, cx + cwMm * k / 2, top + chMm * k)
             comp = c
-            val cy0 = c.bottom + (GAP + LIP * 2) * k
-            val cl = RectF(c.left, cy0, c.right, cy0 + CELL * k)
+            val cl = RectF(c.left, cellTop, c.right, cellTop + CELL * k)
             cell = cl; battery = RectF(cl)
             // the tape's open edge and the heads face the hinge (the crease), as in a real player
             tx = c.left + (CLEAR + HEADS + CH / 2) * k; ty = c.centerY()

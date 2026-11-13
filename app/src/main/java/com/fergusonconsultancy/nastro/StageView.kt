@@ -181,6 +181,20 @@ class StageView(ctx: Context) : View(ctx) {
     /** The screen's own pixels per millimetre: the tape is drawn no bigger than a real one. */
     private val pxPerMm get() = resources.displayMetrics.xdpi / 25.4f
 
+    /**
+     * The scale to draw the tape at on this layout, in px per mm (14 Nov 2026). Mechack: the tape
+     * behind the cover's lens looked bigger than the one in the open compartment; one tape, one size.
+     * Each screen's upright layout records how big the tape can be there, as a fraction of its real
+     * size; every layout draws it no bigger than both screens allow, so it is the same physical size
+     * folded and open.
+     */
+    private fun matched(here: String?, other: String, geom: (Float) -> PlayerGeom): Float {
+        val free = geom(pxPerMm * 20f).k / pxPerMm
+        if (here != null) Prefs.setFit(here, free)
+        val o = Prefs.fit(other)
+        return pxPerMm * (if (o > 0f) min(free, o) else free)
+    }
+
     private fun layoutAll() {
         val L = pl.toFloat(); val T = pt.toFloat()
         val W = (fw - pl - pr).toFloat(); val H = (fh - pt - pb).toFloat()
@@ -193,8 +207,9 @@ class StageView(ctx: Context) : View(ctx) {
             val half = Hf / 2f
             val g = dp(10f)
             val bleed = RectF(0f, 0f, Wf, half)
-            deck = PlayerGeom.bay(L + g, T + g, W - g * 2, half - T - g * 2, bleed, pxPerMm)
-            face = PlayerGeom.face(L + g, T + g, W - g * 2, half - T - g * 2, bleed, pxPerMm)
+            val m = matched(null, "cover") { PlayerGeom.bay(L + g, T + g, W - g * 2, half - T - g * 2, bleed, it) }
+            deck = PlayerGeom.bay(L + g, T + g, W - g * 2, half - T - g * 2, bleed, m)
+            face = PlayerGeom.face(L + g, T + g, W - g * 2, half - T - g * 2, bleed, m)
             shelfBg.set(0f, half, Wf, Hf)
             shelfArea.set(L + dp(12f), half + dp(6f), L + W - dp(12f), T + H - dp(6f))
         } else if (open) {
@@ -202,15 +217,18 @@ class StageView(ctx: Context) : View(ctx) {
             val g = dp(10f)
             val bleed = RectF(half, 0f, Wf, Hf)
             val bw = Wf - pr - half - g * 2
-            deck = PlayerGeom.bay(half + g, T + g, bw, H - g * 2, bleed, pxPerMm)
-            face = PlayerGeom.face(half + g, T + g, bw, H - g * 2, bleed, pxPerMm)
+            val m = matched("main", "cover") { PlayerGeom.bay(half + g, T + g, bw, H - g * 2, bleed, it) }
+            deck = PlayerGeom.bay(half + g, T + g, bw, H - g * 2, bleed, m)
+            face = PlayerGeom.face(half + g, T + g, bw, H - g * 2, bleed, m)
             shelfBg.set(0f, 0f, half, Hf)
             shelfArea.set(L + dp(12f), T + dp(6f), half - dp(12f), T + H - dp(6f))
         } else {
             val v = easeOut(view)
             val off = v * Wf * 1.04f
             val g = dp(8f)
-            deck = PlayerGeom.face(L + g + off, T + g, W - g * 2, H - g * 2, RectF(off, 0f, Wf + off, Hf), pxPerMm)
+            val bleed = RectF(off, 0f, Wf + off, Hf)
+            val m = matched(if (H > W) "cover" else null, "main") { PlayerGeom.face(L + g + off, T + g, W - g * 2, H - g * 2, bleed, it) }
+            deck = PlayerGeom.face(L + g + off, T + g, W - g * 2, H - g * 2, bleed, m)
             val so = (1 - v) * Wf * 1.04f
             shelfBg.set(-so, 0f, Wf - so, Hf)
             shelfArea.set(L + dp(10f) - so, T + dp(6f), L + W - dp(10f) - so, T + H - dp(6f))
