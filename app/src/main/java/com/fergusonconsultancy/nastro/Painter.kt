@@ -56,6 +56,8 @@ class PlayerGeom private constructor(val kind: Kind, val x: Float, val w: Float)
     var comp: RectF? = null
     /** The open body's battery bay. */
     var cell: RectF? = null
+    /** Upright and open: mm of drive showing beyond each end of the tape (the motor, the gears). */
+    var ends = 0f
     var radius = 0f
     /** The player's body: the whole screen (or half) when it runs full-bleed, else its own shape. */
     var body = RectF()
@@ -193,13 +195,18 @@ class PlayerGeom private constructor(val kind: Kind, val x: Float, val w: Float)
             noFace()
             radius = if (bleed != null) 0f else w * 0.08f
             body = bleed?.let { RectF(it) } ?: RectF(x, y, x + w, y + h)
-            val cwMm = CH + HEADS + CLEAR * 2; val chMm = CW + CLEAR * 2
-            val groupMm = chMm + GAP + LIP * 4 + CELL
+            val cwMm = CH + HEADS + CLEAR * 2
+            val groupMm = CW + CLEAR * 2 + GAP + LIP * 4 + CELL
             // the width is what limits the tape upright, so the hole uses the body's whole width, edge to edge
             val bw = (bleed?.width() ?: w) * 0.975f
             var kk = min(bw / (cwMm + LIP * 2), (h * 0.97f) / groupMm)
             if (mm > 0f) kk = min(kk, mm)
             k = kk
+            // 14 Nov 2026, Mechack: use the space at either end. The tape can't grow (the width holds it),
+            // so the hole runs on past its ends and shows what a Walkman hides there: the motor and its
+            // belt at one end, the reel gears at the other
+            ends = ((h * 0.97f / k - groupMm) / 2f).coerceIn(0f, 26f)
+            val chMm = CW + CLEAR * 2 + ends * 2
             // 14 Nov 2026, Mechack: the AA bay down at the foot; the compartment centred in the rest
             val cx = bleed?.centerX() ?: (x + w / 2)
             val cellTop = y + h - (CELL + LIP) * k
@@ -1255,6 +1262,7 @@ class Painter(ctx: Context) {
         c.drawRect(Fl, p)
         p.shader = BitmapShader(grain(), Shader.TileMode.REPEAT, Shader.TileMode.REPEAT); p.alpha = 70
         c.drawRect(Fl, p); p.alpha = 255; p.shader = null
+        drive(c, G)
         chassis(c, G)
         // the deck's ambient darkness gathering towards the corners of the hole
         p.shader = RadialGradient(Fl.centerX(), Fl.centerY(), max(Fl.width(), Fl.height()) * 0.72f, intArrayOf(0, 0, Color.BLACK.a(0.4f)), floatArrayOf(0f, 0.6f, 1f), Shader.TileMode.CLAMP)
@@ -1510,6 +1518,67 @@ class Painter(ctx: Context) {
             val q = G.at(sx, sy)
             screw(c, q.x, q.y, 1.5f * G.k, sx * 3 + sy)
         }
+    }
+
+    /**
+     * The drive beyond the tape's ends, on the compartment floor (14 Nov 2026): at the top the motor,
+     * a steel can on its bracket with its wires, its brass pulley and the flat belt running under the
+     * chassis to the capstan's flywheel; at the foot the reel gear train, nylon and brass, and the
+     * bronze leaf spring that holds a cassette down. In the shell's millimetres, turned with the tape.
+     */
+    private fun drive(c: Canvas, G: PlayerGeom) {
+        val e = G.ends
+        if (e < 6f) return
+        val end = CW / 2 + 1.2f
+        c.save(); c.translate(G.tx, G.ty); c.rotate(G.rot); c.scale(G.k, G.k)
+        // ---- the motor
+        val mx = -end - e * 0.5f; val my = -6f; val mr = min(e * 0.42f, 8.5f)
+        fill(0xFF15191D.toInt()); r.set(mx - mr - 1.6f, my - mr * 0.5f, mx + mr + 1.6f, my + mr * 0.5f); c.drawRoundRect(r, 0.8f, 0.8f, p)   // its bracket
+        for (bx in floatArrayOf(mx - mr - 0.6f, mx + mr + 0.6f)) { p.shader = RadialGradient(bx - 0.3f, my - 0.3f, 1.2f, 0xFFDDE1E5.toInt(), 0xFF5D646C.toInt(), Shader.TileMode.CLAMP); c.drawCircle(bx, my, 0.75f, p); p.shader = null }
+        p.setShadowLayer(1.6f, 0.5f, 1f, 0xAA000000.toInt())
+        p.shader = RadialGradient(mx - mr * 0.35f, my - mr * 0.35f, mr * 1.5f, intArrayOf(0xFFE3E7EB.toInt(), 0xFF8E969F.toInt(), 0xFF3B4148.toInt()), floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP)
+        c.drawCircle(mx, my, mr, p); p.clearShadowLayer(); p.shader = null
+        s.strokeWidth = 0.3f; s.color = 0x55000000; c.drawCircle(mx, my, mr * 0.82f, s); c.drawCircle(mx, my, mr * 0.4f, s)
+        s.color = 0x40FFFFFF; r.set(mx - mr * 0.82f, my - mr * 0.82f, mx + mr * 0.82f, my + mr * 0.82f); c.drawArc(r, 200f, 70f, false, s)
+        // its wires: red and black from the tabs, away round the end
+        s.strokeWidth = 0.55f; s.strokeCap = Paint.Cap.ROUND
+        for ((dx, col) in listOf(-1.4f to 0xFFB3261E.toInt(), 1.4f to 0xFF1A1A1A.toInt())) {
+            s.color = col; path.reset(); path.moveTo(mx + dx, my - mr + 0.6f); path.quadTo(mx + dx, my - mr - 4f, mx + dx * 3f - 6f, -CH / 2 - 0.5f); c.drawPath(path, s)
+        }
+        s.strokeCap = Paint.Cap.BUTT
+        // the belt, from the pulley to the flywheel under the capstan (beneath the chassis from here)
+        val px = mx; val py = my + mr * 0.15f
+        s.strokeWidth = 0.7f; s.color = 0xFF0D0D0D.toInt()
+        c.drawLine(px - 1.6f, py, 10f, 40f, s); c.drawLine(px + 1.6f, py, 17f, 40f, s)
+        s.strokeWidth = 0.2f; s.color = 0x26FFFFFF; c.drawLine(px + 1.6f, py, 17f, 40f, s)
+        p.shader = RadialGradient(px - 0.5f, py - 0.5f, 2.2f, 0xFFF3D99B.toInt(), 0xFF8A6A2E.toInt(), Shader.TileMode.CLAMP); c.drawCircle(px, py, 1.7f, p); p.shader = null
+        fill(0xFF3B2E17.toInt()); c.drawCircle(px, py, 0.5f, p)
+        // ---- the reel gear train
+        val gx = end + e * 0.5f
+        fun gear(x: Float, y: Float, rad: Float, teeth: Int, body: Int, rim: Int, ang: Float) {
+            c.save(); c.translate(x, y); c.rotate(ang * 57.3f)
+            fill(Color.BLACK.a(0.45f)); c.drawCircle(0.4f, 0.7f, rad + 0.4f, p)
+            fill(rim)
+            for (i in 0 until teeth) { c.save(); c.rotate(i * 360f / teeth); c.drawRect(-0.35f, -rad - 0.5f, 0.35f, -rad + 0.3f, p); c.restore() }
+            p.shader = RadialGradient(-rad * 0.3f, -rad * 0.3f, rad * 1.3f, body, rim, Shader.TileMode.CLAMP); c.drawCircle(0f, 0f, rad, p); p.shader = null
+            s.strokeWidth = 0.22f; s.color = 0x33000000; c.drawCircle(0f, 0f, rad * 0.62f, s)
+            for (i in 0 until 3) { c.save(); c.rotate(i * 120f); c.drawLine(0f, rad * 0.25f, 0f, rad * 0.6f, s); c.restore() }
+            fill(0xFF6E757C.toInt()); c.drawCircle(0f, 0f, 0.55f, p)
+            c.restore()
+        }
+        val gr = min(e * 0.26f, 5.2f)
+        gear(gx, -14f, gr, 22, 0xFFF1EFE8.toInt(), 0xFFBDB8AA.toInt(), Deck.angL)
+        gear(gx + gr * 0.25f, -14f + gr + gr * 0.62f + 0.6f, gr * 0.62f, 14, 0xFFF0D392.toInt(), 0xFF9A7A3A.toInt(), -Deck.angL * 1.6f)
+        gear(gx, 12f, gr, 22, 0xFFF1EFE8.toInt(), 0xFFBDB8AA.toInt(), Deck.angR)
+        // the leaf spring that presses a cassette down, screwed to the floor
+        s.strokeWidth = 1.4f; s.color = 0xFFB08A4E.toInt(); s.strokeCap = Paint.Cap.ROUND
+        path.reset(); path.moveTo(end + 0.6f, 24f); path.quadTo(gx, 30f, end + e * 0.85f, 27f); c.drawPath(path, s)
+        s.strokeWidth = 0.3f; s.color = 0x66FFF1C9; c.drawPath(path, s); s.strokeCap = Paint.Cap.BUTT
+        c.restore()
+        // the screws, upright on screen
+        val q1 = G.at(end + e * 0.85f, 27f); screw(c, q1.x, q1.y, 1.2f * G.k, 30f)
+        val q2 = G.at(mx - mr - 0.6f, my); val q3 = G.at(mx + mr + 0.6f, my)
+        screw(c, q2.x, q2.y, 0.9f * G.k, 10f); screw(c, q3.x, q3.y, 0.9f * G.k, 50f)
     }
 
     private val SEG = mapOf('0' to "abcdef", '1' to "bc", '2' to "abged", '3' to "abgcd", '4' to "fgbc", '5' to "afgcd",
