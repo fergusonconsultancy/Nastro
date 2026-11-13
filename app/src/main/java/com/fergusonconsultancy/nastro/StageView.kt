@@ -125,11 +125,13 @@ class StageView(ctx: Context) : View(ctx) {
             swing = if (Prefs.doorSwing) 0f else 1f; swingFrom = SystemClock.uptimeMillis()
             Deck.doorShutQuietly(); view = 0f; viewTarget = 0f
             Sfx.play(Sfx.S.DOOR_OPEN, 0.8f)
+            // the door is open: the tape stops where it is (13 Nov 2026)
+            Deck.setOpen(true)
         } else if (!nowOpen && open) {
-            // Folding: the door has shut; the face appears with the clunk of the catch
+            // Folding: the door has shut; the face appears with the clunk of the catch, and it plays
             swing = 1f; view = 0f; viewTarget = 0f
-            post { Sfx.play(Sfx.S.DOOR_SHUT, 0.8f); clunk() }
-        }
+            post { Sfx.play(Sfx.S.DOOR_SHUT, 0.8f); clunk(); Deck.setOpen(false) }
+        } else Deck.setOpen(nowOpen)
         open = nowOpen
         layoutAll()
     }
@@ -155,6 +157,9 @@ class StageView(ctx: Context) : View(ctx) {
     private val pr get() = paddingRight
     private val pb get() = paddingBottom
 
+    /** The screen's own pixels per millimetre: the tape is drawn no bigger than a real one. */
+    private val pxPerMm get() = resources.displayMetrics.xdpi / 25.4f
+
     private fun layoutAll() {
         val L = pl.toFloat(); val T = pt.toFloat()
         val W = (fw - pl - pr).toFloat(); val H = (fh - pt - pb).toFloat()
@@ -167,7 +172,7 @@ class StageView(ctx: Context) : View(ctx) {
             val half = Hf / 2f
             val g = dp(10f)
             val bleed = RectF(0f, 0f, Wf, half)
-            deck = PlayerGeom.bay(L + g, T + g, W - g * 2, half - T - g * 2, bleed)
+            deck = PlayerGeom.bay(L + g, T + g, W - g * 2, half - T - g * 2, bleed, pxPerMm)
             face = PlayerGeom.face(L + g, T + g, W - g * 2, half - T - g * 2, bleed)
             shelfBg.set(0f, half, Wf, Hf)
             shelfArea.set(L + dp(12f), half + dp(6f), L + W - dp(12f), T + H - dp(6f))
@@ -176,7 +181,7 @@ class StageView(ctx: Context) : View(ctx) {
             val g = dp(10f)
             val bleed = RectF(half, 0f, Wf, Hf)
             val bw = Wf - pr - half - g * 2
-            deck = PlayerGeom.bay(half + g, T + g, bw, H - g * 2, bleed)
+            deck = PlayerGeom.bay(half + g, T + g, bw, H - g * 2, bleed, pxPerMm)
             face = PlayerGeom.face(half + g, T + g, bw, H - g * 2, bleed)
             shelfBg.set(0f, 0f, half, Hf)
             shelfArea.set(L + dp(12f), T + dp(6f), half - dp(12f), T + H - dp(6f))
@@ -334,16 +339,9 @@ class StageView(ctx: Context) : View(ctx) {
             }
         }
         c.restore()
-        if (open && stacked) {
-            val cy = fh / 2f
-            val p = Paint().apply { shader = android.graphics.LinearGradient(0f, cy - dp(6f), 0f, cy + dp(6f), intArrayOf(0, 0x12FFFFFF, 0), null, android.graphics.Shader.TileMode.CLAMP) }
-            c.drawRect(0f, cy - dp(6f), fw.toFloat(), cy + dp(6f), p)
-        } else if (open) {
-            // the crease
-            val cx = fw / 2f
-            val p = Paint().apply { shader = android.graphics.LinearGradient(cx - dp(6f), 0f, cx + dp(6f), 0f, intArrayOf(0, 0x12FFFFFF, 0), null, android.graphics.Shader.TileMode.CLAMP) }
-            c.drawRect(cx - dp(6f), 0f, cx + dp(6f), fh.toFloat(), p)
-        }
+        // the crease is the Walkman's hinge: its knuckles join the door to the body (13 Nov 2026)
+        if (open && stacked) painter.hinge(c, fh / 2f, 0f, fw.toFloat(), true)
+        else if (open) painter.hinge(c, fw / 2f, 0f, fh.toFloat(), false)
 
         val busy = Deck.animating() || Deck.mode == Deck.Mode.PLAY || swing < 1f || shake > 0 || abs(view - viewTarget) > 0.001f ||
             !scroller.isFinished || railWake > 0.01f || lean.any { abs(it) > 0.05f } || proximity.values.any { it > 0.02f } || (pressed != null && now - pressedAt < 200)
@@ -390,7 +388,12 @@ class StageView(ctx: Context) : View(ctx) {
     }
 
     private fun drawShelf(c: Canvas) {
-        painter.shelf(c, shelfArea, slots, lean, true, open, Library.tapes.size, shelfScroll, shelfBg)
+        painter.shelf(c, shelfArea, slots, lean, true, open, Library.tapes.size, shelfScroll, shelfBg, open && stacked)
+        // a tape is waiting in the open Walkman: shutting the door will play it
+        if (open && Deck.resumeOnShut) {
+            val cy = shelfArea.top + dp(56f) - shelfScroll
+            if (cy > shelfArea.top) painter.handwrite(c, "fold shut to play", shelfArea.right - dp(42f), cy, dp(20f), shelfArea.width() * 0.5f, 0xFFFFAD33.toInt(), android.graphics.Paint.Align.RIGHT)
+        }
         // the way to the settings when unfolded: on the shelf's heading, scrolling away with it
         val sy = shelfArea.top + dp(30f) - shelfScroll
         if (sy > shelfArea.top) {

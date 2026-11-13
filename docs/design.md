@@ -134,3 +134,21 @@ The compartment keeps the shell and the heads clear of its walls, so the tape is
 - hold a mixtape on the shelf to write on it again or throw it away (two taps). Rewriting the tape in the deck starts it from the top of side A; throwing it away loads the next tape;
 - the readout shows each song as "title - artist", since a mixtape mixes artists; the notification splits them back out;
 - saved as song ids, so a song that leaves the phone is simply skipped.
+
+## Sixth review, 11–13 Nov: the hi-fi, tried and dropped
+
+Unfolded became a home hi-fi stack for a day (option A of two mockups, from Mechack's Denon D-F10, Teac W-1200 and Pioneer Elite references), with a hinge-driven deck door. Seen on the phone, a Walkman outside and a hi-fi inside were two machines with no story between them, and tape playing on with the doors open had no logic. Both commits were reverted; the mixtapes, crash report and orientation work stay. Mockups and the two whole-app pairs remain on the design canvas "Nastro unfolded: the hi-fi".
+
+## Seventh review, 13 Nov: back to the Walkman, the phone as the Walkman
+
+Mechack: back to option 1, the Walkman on both screens. What he wants is the open screen not to look flat. From his two Deck-Man recordings (iPhone Duo): the app looks lifelike because of its scale, so the phone itself seems to have become a Walkman, and the hinge reads as real hardware. Use the full chassis, follow the mandate, and keep the continuity, logic and detail of the original Walkman version.
+
+**The door's logic (his choice of three):** unfolding opens the door, so the tape stops where it is, its play key popping up. With the door open you can turn the tape over, wind it by hand, or choose another, which drops in; folding shuts the door and plays. The keys and transport do nothing with the door open; play pressed from the notification is remembered for when it shuts. The shelf's heading says "fold shut to play" while a tape waits. A door left open for more than 30 minutes shuts without playing.
+
+**The face is the door.** Its readout, keys and switches are on its outside, so with it open they have swung away: the body half is all compartment, the tape at the largest size that fits and never bigger than a real one (read from the screen's own pixels per millimetre), and at its foot the battery bay, one AA lying between its coil spring and plate, as the WM-EX610 took.
+
+**The fold is the hinge.** Two chrome knuckles on their pin sit on the crease, each with a leaf screwed to the door and one to the body.
+
+**The inside of the door** is the back of the face: the face's own brushed metal runs round the rim, a moulded panel steps down inside it with a chamfer and the rim's shadow, screwed through the outer rim, with the moulded groove on the hinge side where the index lives. The shelf is kept on it.
+
+Phone on its side: the same, the body above the crease with the battery bay beside the tape, the door below, the knuckles across.

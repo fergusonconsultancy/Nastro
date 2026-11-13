@@ -141,6 +141,9 @@ object Deck {
     // ---- Keys -----------------------------------------------------------------------------------
     fun press(key: Key) {
         if (hold) { onEvent?.invoke(Event.REFUSED); return }
+        // With the door open nothing runs (a play key pressed from the notification is remembered
+        // for when the door shuts)
+        if (compartmentOpen) { if (key == Key.PLAY) resumeOnShut = true; onEvent?.invoke(Event.REFUSED); return }
         onEvent?.invoke(Event.KEY)
         val t = tape ?: return
         when (key) {
@@ -222,7 +225,11 @@ object Deck {
     fun load(t: Tape, direct: Boolean) {
         if (t === Library.BLANK) return
         if (hold) { onEvent?.invoke(Event.REFUSED); return }
-        if (t === tape && door < 0.05f) { if (mode == Mode.STOP) press(Key.PLAY); return }
+        if (t === tape && door < 0.05f) {
+            if (compartmentOpen) { resumeOnShut = true; onEvent?.invoke(Event.KEY); notifyChanged() }
+            else if (mode == Mode.STOP) press(Key.PLAY)
+            return
+        }
         save()
         mode = Mode.STOP
         pending = t; pendingDirect = direct; pendingSince = SystemClock.uptimeMillis(); swappedAt = 0L
@@ -232,6 +239,38 @@ object Deck {
 
     /** Unfolding opens the whole compartment, so the cover screen's door has nothing left to do. */
     fun doorShutQuietly() { door = 0f; doorTarget = 0f }
+
+    // ---- the phone is the door (13 Nov 2026) ---------------------------------------------------------
+    // Mechack: tape playing with the door open looks terrible and has no logic. Unfolding opens the
+    // Walkman's door, so the tape stops where it is, its play key popping up. With the door open you
+    // can turn the tape over, wind it by hand or choose another, which drops in. Folding shuts the
+    // door and plays, as Deck-Man does.
+    /** True while the phone is unfolded: the Walkman's door stands open. */
+    var compartmentOpen = false; private set
+    /** Shutting the door will play: it was playing when opened, or a tape went in while it was open. */
+    var resumeOnShut = false; private set
+    private var openedAt = 0L
+
+    /** The phone has been opened or shut; [open] true is unfolded. */
+    fun setOpen(open: Boolean) {
+        if (open == compartmentOpen) return
+        compartmentOpen = open
+        if (open) {
+            openedAt = SystemClock.uptimeMillis()
+            resumeOnShut = mode == Mode.PLAY || mode == Mode.AMS
+            if (mode != Mode.STOP) { mode = Mode.STOP; amsTarget = null; blank = false; Sfx.update(0.0, false); onEvent?.invoke(Event.KEY) }
+            doorShutQuietly(); save(); wake(); notifyChanged()
+        } else {
+            // a door left open for hours and shut later shouldn't burst into song
+            val fresh = SystemClock.uptimeMillis() - openedAt < 30 * 60_000L
+            if (resumeOnShut && fresh && tape != null && pending == null && !hold) {
+                resumeOnShut = false
+                startService(); mode = Mode.PLAY; amsTarget = null; blank = false
+                wake(); notifyChanged()
+            }
+            resumeOnShut = false
+        }
+    }
 
     private fun insert(t: Tape) {
         tape = t
@@ -374,7 +413,9 @@ object Deck {
             if (pendingDirect) {
                 if (now - pendingSince > FLIGHT_MS) {
                     insert(p); pending = null; onEvent?.invoke(Event.CLUNK)
-                    startService(); mode = Mode.PLAY; notifyChanged()
+                    // dropped into an open Walkman, it waits for the door
+                    if (compartmentOpen) resumeOnShut = true else { startService(); mode = Mode.PLAY }
+                    notifyChanged()
                 }
                 return@let
             }

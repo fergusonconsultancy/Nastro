@@ -53,6 +53,8 @@ class PlayerGeom private constructor(val kind: Kind, val x: Float, val w: Float)
     var battery: RectF? = null
     var wheel: RectF? = null
     var comp: RectF? = null
+    /** The open body's battery bay. */
+    var cell: RectF? = null
     var radius = 0f
     /** The player's body: the whole screen (or half) when it runs full-bleed, else its own shape. */
     var body = RectF()
@@ -159,50 +161,58 @@ class PlayerGeom private constructor(val kind: Kind, val x: Float, val w: Float)
             wheel = RectF(wr - 0.03f * w, ld.top + ld.height() * 0.08f, wr + 0.015f * w, ld.top + ld.height() * 0.08f + 0.36f * w)
         }
 
-        fun bay(x: Float, y: Float, w: Float, h: Float, bleed: RectF? = null): PlayerGeom =
-            if (w > h * 1.05f) bayWide(x, y, w, h, bleed) else bayTall(x, y, w, h, bleed)
+        /**
+         * The open body (13 Nov 2026, back to the Walkman): the face is the door, so its readout and
+         * keys swing away with it and the body is all compartment, the tape at its foot's battery bay.
+         * [mm] is the screen's pixels per millimetre: the tape is drawn at its real size where it fits,
+         * so the phone itself becomes the Walkman.
+         */
+        fun bay(x: Float, y: Float, w: Float, h: Float, bleed: RectF? = null, mm: Float = 0f): PlayerGeom =
+            if (w > h * 1.05f) bayWide(x, y, w, h, bleed, mm) else bayTall(x, y, w, h, bleed, mm)
 
-        private fun bayTall(x: Float, y: Float, w: Float, h: Float, bleed: RectF?): PlayerGeom = PlayerGeom(Kind.BAY, x, w).apply {
+        private fun PlayerGeom.noFace() {
+            lcd = RectF(); chan = RectF(); keys = emptyList(); keyPlate = null; legends = emptyList(); hold = null; wheel = null; battery = null
+        }
+
+        private fun bayTall(x: Float, y: Float, w: Float, h: Float, bleed: RectF?, mm: Float): PlayerGeom = PlayerGeom(Kind.BAY, x, w).apply {
             this.y = y; this.h = h
+            noFace()
             radius = if (bleed != null) 0f else w * 0.08f
             body = bleed?.let { RectF(it) } ?: RectF(x, y, x + w, y + h)
-            lcd = RectF(x + 0.06f * w, y + 0.05f * w, x + 0.94f * w, y + 0.25f * w)
-            val chanH = 0.2f * w
-            chan = RectF(x + 0.05f * w, y + h - chanH - 0.05f * w, x + 0.95f * w, y + h - 0.05f * w)
-            keys = keyRow(chan)
-            keyPlate = plateFor(keys)
-            // room all round for the raised lip the hole is cut through
-            val c = RectF(x + 0.045f * w, lcd.bottom + 0.07f * w, x + 0.955f * w, keyPlate!!.top - 0.065f * w)
+            // the battery bay at the foot: one AA lying across (50.5 × 14.5 mm)
+            val c0 = RectF(x + 0.045f * w, y + 0.05f * w, x + 0.955f * w, y + h - 0.05f * w)
+            var kk = minOf((c0.width() - 0.067f * w) / 72.4f, (c0.height() * 0.78f - 0.067f * w) / 104f)
+            if (mm > 0f) kk = min(kk, mm)
+            val bayH = 14.5f * kk + 0.12f * w
+            val c = RectF(c0.left, c0.top, c0.right, c0.bottom - bayH - 0.05f * w)
             comp = c
-            // the shell and the heads below its foot span 72.4 mm across, 104 mm along; keep clear of the walls
-            k = minOf((c.width() - 0.067f * w) / 72.4f, (c.height() - 0.067f * w) / 104f)
+            cell = RectF(c0.left, c.bottom + 0.05f * w, c0.right, c0.bottom)
+            k = minOf(kk, (c.width() - 0.067f * w) / 72.4f, (c.height() - 0.067f * w) / 104f)
             // the tape's open edge and the heads face the hinge (the crease), as in a real player
             tx = c.centerX() + 4.3f * k; ty = c.centerY()
             win = RectF(c)
         }
 
         /**
-         * The open deck with the phone on its side (11 Nov 2026): the crease runs across, so the deck
-         * takes the top half with the tape lying flat, label up and its open edge down at the hinge;
-         * the readout and keys stand in a column on the right.
+         * The open body with the phone on its side: the crease runs across, so the body takes the top
+         * half, the tape lying flat with its open edge down at the hinge, the battery bay beside it.
          */
-        private fun bayWide(x: Float, y: Float, w: Float, h: Float, bleed: RectF?): PlayerGeom = PlayerGeom(Kind.BAY, x, w).apply {
+        private fun bayWide(x: Float, y: Float, w: Float, h: Float, bleed: RectF?, mm: Float): PlayerGeom = PlayerGeom(Kind.BAY, x, w).apply {
             this.y = y; this.h = h
             rot = 0f
+            noFace()
+            u = h
             radius = if (bleed != null) 0f else h * 0.08f
             body = bleed?.let { RectF(it) } ?: RectF(x, y, x + w, y + h)
             val pad = h * 0.05f
-            u = minOf(w * 0.36f, (h - pad * 2) / 0.7f)
-            val colR = x + w - pad; val colL = colR - u
-            val stackH = u * 0.62f
-            val top = y + (h - stackH) / 2
-            lcd = RectF(colL, top, colR, top + 0.25f * u)
-            chan = RectF(colL, lcd.bottom + 0.12f * u, colR, lcd.bottom + 0.34f * u)
-            keys = keyRow(chan)
-            keyPlate = plateFor(keys)
-            val c = RectF(x + pad * 1.4f, y + pad * 1.4f, colL - pad * 1.8f, y + h - pad * 1.4f)
+            val c0 = RectF(x + pad, y + pad, x + w - pad, y + h - pad)
+            var kk = minOf((c0.width() * 0.8f - 0.067f * h) / 104f, (c0.height() - 0.067f * h) / 72.4f)
+            if (mm > 0f) kk = min(kk, mm)
+            val bayW = 14.5f * kk + 0.12f * h
+            val c = RectF(c0.left, c0.top, c0.right - bayW - pad, c0.bottom)
             comp = c
-            k = minOf((c.width() - 0.067f * u) / 104f, (c.height() - 0.067f * u) / 72.4f)
+            cell = RectF(c.right + pad, c0.top, c0.right, c0.bottom)
+            k = minOf(kk, (c.width() - 0.067f * h) / 104f, (c.height() - 0.067f * h) / 72.4f)
             tx = c.centerX(); ty = c.centerY() - 4.3f * k
             win = RectF(c)
         }
@@ -301,7 +311,7 @@ class Painter(ctx: Context) {
         t.letterSpacing = 0f
     }
 
-    private fun handwrite(c: Canvas, text: String, x: Float, y: Float, size: Float, maxW: Float, color: Int,
+    internal fun handwrite(c: Canvas, text: String, x: Float, y: Float, size: Float, maxW: Float, color: Int,
                           align: Paint.Align = Paint.Align.LEFT) {
         t.typeface = hand; t.textSize = size; t.color = color; t.textAlign = align; t.letterSpacing = 0f
         t.shader = null; t.clearShadowLayer()
@@ -1112,11 +1122,7 @@ class Painter(ctx: Context) {
         bevel(c, body, R)
         hingeEdge(c, G)
 
-        // the readout's housing stands on the body
-        val L = G.lcd
-        fill(Color.BLACK); p.setShadowLayer(dp(5f), dp(1f), dp(2.5f), 0x8C000000.toInt())
-        c.drawRoundRect(L, L.height() * 0.42f, L.height() * 0.42f, p); p.clearShadowLayer()
-        lcd(c, L, detail, live)
+        // The readout and keys are on the face, which is the door: open, they have swung away with it
 
         val C = G.comp ?: return
         val cr = u * 0.045f
@@ -1176,14 +1182,102 @@ class Painter(ctx: Context) {
         r.set(C.left - dp(0.8f), C.top - dp(0.8f), C.right + dp(0.8f), C.bottom + dp(0.8f)); c.drawRoundRect(r, cr, cr, s)
         s.shader = null
 
-        // 5 the keys, sunk into their own plate
-        G.keyPlate?.let { kp ->
-            val kr = kp.height() / 2
-            raisedPlate(c, kp, kr, F, false)
-            screw(c, kp.left + kr * 0.42f, kp.centerY(), kr * 0.11f, 20f)
-            screw(c, kp.right - kr * 0.42f, kp.centerY(), kr * 0.11f, 65f)
+        // 5 the battery bay at the foot, its AA in place
+        G.cell?.let { cellBay(c, G, it, F) }
+    }
+
+    /**
+     * The battery bay (13 Nov 2026): the WM-EX610 ran on one AA in the body. A smaller hole through
+     * the same lip, its contacts at either end (a coil spring at the negative, a plate at the
+     * positive) and the cell lying between them, drawn to the tape's scale.
+     */
+    private fun cellBay(c: Canvas, G: PlayerGeom, B: RectF, F: Finish) {
+        val u = G.u
+        val lip = u * 0.022f
+        val cr = u * 0.03f
+        val O = RectF(B.left - lip, B.top - lip, B.right + lip, B.bottom + lip)
+        raisedPlate(c, O, cr + lip, F, !G.wide)
+        // the hole
+        p.shader = LinearGradient(B.left, B.top, B.right, B.bottom, 0xFF1A1F25.toInt(), 0xFF0A0D10.toInt(), Shader.TileMode.CLAMP)
+        c.drawRoundRect(B, cr, cr, p); p.shader = null
+        c.save(); path.reset(); path.addRoundRect(B, cr, cr, Path.Direction.CW); c.clipPath(path)
+        p.shader = LinearGradient(0f, B.top, 0f, B.top + lip * 2.4f, Color.BLACK.a(0.7f), 0, Shader.TileMode.CLAMP); c.drawRect(B, p)
+        p.shader = LinearGradient(B.left, 0f, B.left + lip * 2f, 0f, Color.BLACK.a(0.5f), 0, Shader.TileMode.CLAMP); c.drawRect(B, p); p.shader = null
+        // the cell, in millimetres, lying along the bay
+        val k = G.k
+        c.save(); c.translate(B.centerX(), B.centerY()); if (!G.wide) c.rotate(0f) else c.rotate(90f); c.scale(k, k)
+        val L = 50.5f; val D = 14.5f
+        // contacts: a coil spring at the negative end, a plate at the positive
+        s.shader = null; s.strokeWidth = 0.7f; s.color = 0xFFC9CED4.toInt()
+        val sx0 = -L / 2 - 4.6f
+        path.reset(); path.moveTo(sx0, -D * 0.3f)
+        for (i in 0..7) { val xx = sx0 + i * 0.62f; path.lineTo(xx + 0.31f, if (i % 2 == 0) D * 0.3f else -D * 0.3f) }
+        c.drawPath(path, s)
+        fill(0xFFB9BEC4.toInt()); r.set(L / 2 + 0.6f, -D * 0.32f, L / 2 + 2.2f, D * 0.32f); c.drawRect(r, p)
+        // its shadow on the floor
+        fill(Color.BLACK.a(0.5f)); p.setShadowLayer(2.2f, 0.6f, 1.2f, Color.BLACK.a(0.8f)); r.set(-L / 2, -D / 2, L / 2, D / 2); c.drawRoundRect(r, 1.5f, 1.5f, p); p.clearShadowLayer()
+        // the wrapper: a cylinder, lit along its top
+        p.shader = LinearGradient(0f, -D / 2, 0f, D / 2, intArrayOf(0xFF0E3B26.toInt(), 0xFF2F8A5C.toInt(), 0xFF0B2A1B.toInt(), 0xFF051209.toInt()), floatArrayOf(0f, 0.28f, 0.7f, 1f), Shader.TileMode.CLAMP)
+        r.set(-L / 2, -D / 2, L / 2 - 1.2f, D / 2); c.drawRoundRect(r, 1.2f, 1.2f, p)
+        // a champagne band and the printing
+        p.shader = LinearGradient(0f, -D / 2, 0f, D / 2, intArrayOf(0xFF6B5A3C.toInt(), 0xFFEBD9B4.toInt(), 0xFF8A734C.toInt(), 0xFF3B3122.toInt()), floatArrayOf(0f, 0.3f, 0.7f, 1f), Shader.TileMode.CLAMP)
+        c.drawRect(L * 0.12f, -D / 2, L * 0.24f, D / 2, p); p.shader = null
+        print(c, "1.5V  AA", -L * 0.12f, D * 0.14f, 4.2f, 0xFFD9BB86.toInt(), true, Paint.Align.CENTER, 0.5f)
+        // the positive nub, and the flat negative end
+        p.shader = LinearGradient(0f, -2.8f, 0f, 2.8f, intArrayOf(0xFFF4F5F6.toInt(), 0xFF8D949B.toInt(), 0xFF4D5258.toInt()), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
+        r.set(L / 2 - 1.4f, -D * 0.42f, L / 2 - 0.2f, D * 0.42f); c.drawRect(r, p)
+        r.set(L / 2 - 0.3f, -2.6f, L / 2 + 0.6f, 2.6f); c.drawRoundRect(r, 0.4f, 0.4f, p)
+        r.set(-L / 2 - 0.4f, -D * 0.44f, -L / 2 + 0.5f, D * 0.44f); c.drawRect(r, p); p.shader = null
+        // moulded polarity marks on the floor beyond the ends
+        print(c, "−", sx0 - 2.6f, 1.6f, 5f, 0x66FFFFFF, true, Paint.Align.CENTER, 0f)
+        print(c, "+", L / 2 + 4.6f, 1.6f, 5f, 0x66FFFFFF, true, Paint.Align.CENTER, 0f)
+        c.restore()
+        c.restore()
+        s.strokeWidth = dp(1.4f)
+        s.shader = LinearGradient(0f, B.top, 0f, B.bottom, intArrayOf(Color.BLACK.a(0.7f), Color.BLACK.a(0.2f), Color.WHITE.a(0.5f)), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
+        r.set(B.left - dp(0.7f), B.top - dp(0.7f), B.right + dp(0.7f), B.bottom + dp(0.7f)); c.drawRoundRect(r, cr, cr, s)
+        s.shader = null
+    }
+
+    /**
+     * The door's hinge on the crease (13 Nov 2026): two chrome knuckles on their pin, each with a
+     * leaf screwed to the door and one to the body, so the phone's own fold is the Walkman's hinge.
+     * [x], [y0], [y1] place a crease running down the screen; [across] turns it to run across.
+     */
+    fun hinge(c: Canvas, at: Float, from: Float, to: Float, across: Boolean, alpha: Float = 1f) {
+        if (alpha < 0.01f) return
+        val F = finish()
+        val len = to - from
+        val kl = min(dp(78f), len * 0.12f)
+        val bw = dp(11f); val leaf = dp(17f)
+        c.save()
+        if (across) { c.translate(0f, at); c.rotate(-90f); c.translate(-at, 0f) }
+        for (f in floatArrayOf(0.2f, 0.8f)) {
+            val cy = from + len * f
+            val x = if (across) at else at
+            // the leaves, one on each side, a shade lighter than the body, screwed down
+            for (side in intArrayOf(-1, 1)) {
+                val lx0 = if (side < 0) x - bw / 2 - leaf else x + bw / 2
+                r.set(lx0, cy - kl * 0.42f, lx0 + leaf, cy + kl * 0.42f)
+                fill(Color.BLACK.a(0.5f * alpha)); p.setShadowLayer(dp(3f), 0f, dp(1.5f), Color.BLACK.a(0.7f * alpha)); c.drawRoundRect(r, dp(3f), dp(3f), p); p.clearShadowLayer()
+                p.shader = LinearGradient(r.left, r.top, r.right, r.bottom, intArrayOf(lighten(F.lid[0], 0.25f).a(alpha), F.lid[1].a(alpha), darken(F.stops[2], 0.2f).a(alpha)), null, Shader.TileMode.CLAMP)
+                c.drawRoundRect(r, dp(3f), dp(3f), p); p.shader = null
+                s.strokeWidth = dp(0.7f); s.color = Color.WHITE.a(0.35f * alpha); c.drawLine(r.left + dp(2f), r.top + dp(0.6f), r.right - dp(2f), r.top + dp(0.6f), s)
+                val sxx = r.centerX()
+                screw(c, sxx, cy - kl * 0.22f, dp(2.6f), 30f + side * 20f)
+                screw(c, sxx, cy + kl * 0.22f, dp(2.6f), 70f - side * 15f)
+            }
+            // the barrel: a polished cylinder, its pin showing at each end
+            r.set(x - bw / 2, cy - kl / 2, x + bw / 2, cy + kl / 2)
+            fill(Color.BLACK.a(0.6f * alpha)); p.setShadowLayer(dp(4f), dp(1f), dp(2f), Color.BLACK.a(0.8f * alpha)); c.drawRoundRect(r, bw / 2, bw / 2, p); p.clearShadowLayer()
+            p.shader = LinearGradient(r.left, 0f, r.right, 0f, intArrayOf(0xFF4D5258.toInt().a(alpha), 0xFFF4F5F6.toInt().a(alpha), 0xFFB9BEC4.toInt().a(alpha), 0xFF6B7178.toInt().a(alpha), 0xFF2A2E33.toInt().a(alpha)), floatArrayOf(0f, 0.3f, 0.45f, 0.75f, 1f), Shader.TileMode.CLAMP)
+            c.drawRoundRect(r, bw / 2, bw / 2, p); p.shader = null
+            // where door knuckle meets body knuckle
+            s.strokeWidth = dp(1f); s.color = Color.BLACK.a(0.6f * alpha); c.drawLine(r.left, cy, r.right, cy, s)
+            s.color = Color.WHITE.a(0.3f * alpha); c.drawLine(r.left, cy + dp(1f), r.right, cy + dp(1f), s)
+            fill(0xFF8D949B.toInt().a(alpha)); c.drawCircle(x, r.top + bw * 0.25f, bw * 0.16f, p); c.drawCircle(x, r.bottom - bw * 0.25f, bw * 0.16f, p)
         }
-        keys(c, G, F, live)
+        c.restore()
     }
 
     /** The light falls off towards the body's edges, as on any curved, lit object. */
@@ -1306,20 +1400,64 @@ class Painter(ctx: Context) {
     // ---- the shelf -----------------------------------------------------------------------------------
     class Slot(val tape: Tape, val index: Int, val rect: RectF)
 
-    /** Inside of the door when the phone is open: the shelf is kept here. */
-    fun doorInside(c: Canvas, area: RectF, hingeRight: Boolean, rad: Float = dp(18f)) {
-        val inside = finish().inside
-        p.shader = LinearGradient(area.left, area.top, area.right, area.bottom, inside[0], inside[1], Shader.TileMode.CLAMP)
-        c.drawRoundRect(area, rad, rad, p); p.shader = null
-        c.save(); path.reset(); path.addRoundRect(area, rad, rad, Path.Direction.CW); c.clipPath(path)
+    /**
+     * Inside of the door when the phone is open: the shelf is kept here. Full-bleed (13 Nov 2026),
+     * it is the back of the face: the face's own brushed metal runs round the rim, and inside it a
+     * moulded panel, chamfered where it steps down, screwed at its corners, with the moulded groove
+     * along the hinge side where the index lives.
+     */
+    fun doorInside(c: Canvas, area: RectF, hingeRight: Boolean, rad: Float = dp(18f), hingeBottom: Boolean = false) {
+        val F = finish()
+        val inside = F.inside
+        if (rad > 0f) {
+            p.shader = LinearGradient(area.left, area.top, area.right, area.bottom, inside[0], inside[1], Shader.TileMode.CLAMP)
+            c.drawRoundRect(area, rad, rad, p); p.shader = null
+        } else {
+            // the rim: the face's metal, brushed as the lid is
+            fill(F.lid[1]); c.drawRect(area, p)
+            metal(c, area, 0f, intArrayOf(F.lid[0], F.lid[1], F.stops[2]), !hingeBottom, F.lacquer, F.aniso)
+        }
+        val rimO = if (rad > 0f) 0f else dp(12f); val rimH = if (rad > 0f) 0f else dp(5f)
+        // [hingeBottom]: the phone on its side, the door below the crease, so its hinge edge is its top
+        val P = RectF(
+            area.left + (if (!hingeBottom && !hingeRight) rimH else rimO),
+            area.top + (if (hingeBottom) rimH else rimO),
+            area.right - (if (hingeRight && !hingeBottom) rimH else rimO),
+            area.bottom - rimO)
+        val pr = if (rad > 0f) rad else dp(14f)
+        if (rad == 0f) {
+            // the step down from rim to panel: dark where it faces away from the light, lit where it faces it
+            fill(Color.BLACK.a(0.55f)); r.set(P.left - dp(1.5f), P.top - dp(1.5f), P.right + dp(1f), P.bottom + dp(1f)); c.drawRoundRect(r, pr + dp(1.5f), pr + dp(1.5f), p)
+        }
+        p.shader = LinearGradient(P.left, P.top, P.right, P.bottom, inside[0], inside[1], Shader.TileMode.CLAMP)
+        c.drawRoundRect(P, pr, pr, p); p.shader = null
+        c.save(); path.reset(); path.addRoundRect(P, pr, pr, Path.Direction.CW); c.clipPath(path)
+        // fine moulding ribs
         s.strokeWidth = 1f; s.color = 0x09FFFFFF
-        var yy = area.top + dp(14f); val step = dp(7f)
-        while (yy < area.bottom) { c.drawLine(area.left, yy, area.right, yy, s); yy += step }
+        var yy = P.top + dp(14f); val step = dp(7f)
+        while (yy < P.bottom) { c.drawLine(P.left, yy, P.right, yy, s); yy += step }
+        if (rad == 0f) {
+            // the rim's shadow falling onto the panel
+            p.shader = LinearGradient(0f, P.top, 0f, P.top + dp(16f), Color.BLACK.a(0.45f), 0, Shader.TileMode.CLAMP); c.drawRect(P, p)
+            p.shader = LinearGradient(P.left, 0f, P.left + dp(12f), 0f, Color.BLACK.a(0.35f), 0, Shader.TileMode.CLAMP); c.drawRect(P, p)
+            p.shader = null
+        }
         // The trim along the hinge edge: one moulded groove, where the index lives
-        val gx = if (hingeRight) area.right - dp(14f) else area.left + dp(14f)
-        s.strokeWidth = dp(1f); s.color = 0x33000000; c.drawLine(gx, area.top + dp(20f), gx, area.bottom - dp(20f), s)
-        s.color = 0x14FFFFFF; c.drawLine(gx + dp(1f), area.top + dp(20f), gx + dp(1f), area.bottom - dp(20f), s)
+        if (!hingeBottom) {
+            val gx = if (hingeRight) P.right - dp(14f) else P.left + dp(14f)
+            s.strokeWidth = dp(1f); s.color = 0x33000000; c.drawLine(gx, P.top + dp(20f), gx, P.bottom - dp(20f), s)
+            s.color = 0x14FFFFFF; c.drawLine(gx + dp(1f), P.top + dp(20f), gx + dp(1f), P.bottom - dp(20f), s)
+        }
         c.restore()
+        if (rad == 0f) {
+            s.strokeWidth = dp(1f); s.shader = LinearGradient(P.left, P.top, P.right, P.bottom, intArrayOf(Color.BLACK.a(0.6f), Color.WHITE.a(0.28f)), null, Shader.TileMode.CLAMP)
+            c.drawRoundRect(P, pr, pr, s); s.shader = null
+            // the panel's screws, in the outer rim, clear of the screen's rounded corners and the camera
+            val q = dp(6f)
+            val pts = if (hingeBottom) listOf(area.left + area.width() * 0.25f to area.bottom - q, area.left + area.width() * 0.75f to area.bottom - q)
+                else { val ox = if (hingeRight) area.left + q else area.right - q; listOf(ox to area.top + area.height() * 0.25f, ox to area.top + area.height() * 0.75f) }
+            for ((sx, sy) in pts) screw(c, sx, sy, dp(3f), (sx + sy) % 90f)
+        }
     }
 
     /**
@@ -1349,11 +1487,11 @@ class Painter(ctx: Context) {
     }
 
     /** [area] holds the tapes; [bg], when given, is the full-bleed panel behind them (square-cornered). */
-    fun shelf(c: Canvas, area: RectF, slots: List<Slot>, lean: FloatArray, header: Boolean, onDoor: Boolean, count: Int, scroll: Float = 0f, bg: RectF? = null) {
+    fun shelf(c: Canvas, area: RectF, slots: List<Slot>, lean: FloatArray, header: Boolean, onDoor: Boolean, count: Int, scroll: Float = 0f, bg: RectF? = null, hingeBottom: Boolean = false) {
         val fade = 1 - Deck.conc * 0.75f
         val panel = bg ?: area
         val rad = if (bg != null) 0f else dp(18f)
-        if (onDoor) doorInside(c, panel, true, rad) else { fill(0xFF13171C.toInt()); c.drawRoundRect(panel, rad, rad, p) }
+        if (onDoor) doorInside(c, panel, true, rad, hingeBottom) else { fill(0xFF13171C.toInt()); c.drawRoundRect(panel, rad, rad, p) }
         c.save(); path.reset(); path.addRoundRect(panel, rad, rad, Path.Direction.CW); c.clipPath(path)
         if (header) {
             // The heading scrolls away with the tapes rather than sliding under them

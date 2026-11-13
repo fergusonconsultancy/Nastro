@@ -2,7 +2,7 @@
 
 A cassette Walkman for the Galaxy Z Fold8 Ultra, built from the tapes and the light-blue Sony WM-EX610 of 2001.
 
-**The fold is the door.** Folded, the cover screen is the Walkman's face: the tape behind smoked acrylic, a readout with a tape counter, four round keys and the printed switches. Unfolding swings that face open on the crease. The right half is the compartment it covered, with the tape at full colour on its spindles and the head and pinch roller at its foot. The left half is the inside of the door, where your tapes are kept. Folding shuts it with a clunk.
+**The fold is the door.** Folded, the cover screen is the Walkman's face: the tape behind smoked acrylic, a readout with a tape counter, four round keys and the printed switches. Unfolding swings that face open on the crease. The right half is the compartment it covered, with the tape at full colour on its spindles and the head and pinch roller at its foot. The left half is the inside of the door, where your tapes are kept, joined to the body by hinge knuckles on the crease. The tape is drawn no bigger than a real one, so the phone itself becomes the Walkman. Folding shuts it with a clunk.
 
 Every album on the phone is dubbed onto the shortest cassette that holds it (C60, C90 or C120), split into sides at the track nearest half way, with its label written by hand. The shells are drawn from real tapes of the period, without makers' marks.
 
@@ -16,7 +16,7 @@ Every album on the phone is dubbed onto the shortest cassette that holds it (C60
 - **Every tape is where you left it.** Position and side are kept per album.
 - **Mixtapes.** Pick the blank at the head of the shelf, write its name, choose a shell and put songs on in your own order. It goes onto the shortest tape that holds them. Hold a mixtape on the shelf to change it or throw it away.
 - **Any way up.** Turned on its side, the cover screen lays the player out sideways and the open phone puts the deck above the shelf, everything upright.
-- **Opening the door does not stop the tape.** Choosing another tape does.
+- **Opening the door stops the tape.** Unfold the phone and the play key pops up. Turn the tape over, wind it by hand or choose another and it drops in; fold the phone to shut the door and it plays.
 - Headphones pulled out stop it. Lock screen, headset and notification controls drive the same deck.
 
 ## Design
