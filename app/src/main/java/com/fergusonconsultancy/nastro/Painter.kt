@@ -202,8 +202,8 @@ class PlayerGeom private constructor(val kind: Kind, val x: Float, val w: Float)
             val c = RectF(cx - cwMm * k / 2, top, cx + cwMm * k / 2, top + chMm * k)
             comp = c
             val cy0 = c.bottom + (GAP + LIP * 2) * k
-            cell = RectF(c.left, cy0, c.right, cy0 + CELL * k)
-            battery = RectF(cell)
+            val cl = RectF(c.left, cy0, c.right, cy0 + CELL * k)
+            cell = cl; battery = RectF(cl)
             // the tape's open edge and the heads face the hinge (the crease), as in a real player
             tx = c.left + (CLEAR + HEADS + CH / 2) * k; ty = c.centerY()
             win = RectF(c)
@@ -231,8 +231,8 @@ class PlayerGeom private constructor(val kind: Kind, val x: Float, val w: Float)
             val c = RectF(left, cy - chMm * k / 2, left + cwMm * k, cy + chMm * k / 2)
             comp = c
             val cx0 = c.right + (GAP + LIP * 2) * k
-            cell = RectF(cx0, c.top, cx0 + CELL * k, c.bottom)
-            battery = RectF(cell)
+            val cl = RectF(cx0, c.top, cx0 + CELL * k, c.bottom)
+            cell = cl; battery = RectF(cl)
             tx = c.centerX(); ty = c.top + (CLEAR + CH / 2) * k
             win = RectF(c)
         }
