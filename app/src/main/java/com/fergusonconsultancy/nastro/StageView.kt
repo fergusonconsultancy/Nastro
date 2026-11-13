@@ -77,21 +77,8 @@ class StageView(ctx: Context) : View(ctx) {
 
     private val changed = { invalidate() }
 
-    // Unfolded: the hi-fi (11 Nov 2026), and the whole shelf pulled out of its drawer
-    private val hifi = HiFi(ctx, painter)
-    private var shelfOut = false
-    private var shelfT = 0f
-
     init {
         setBackgroundColor(0xFF07090B.toInt())
-        hifi.onKey = { k -> pressKey(k); invalidate() }
-        hifi.onOpenShelf = { shelfOut = true; invalidate() }
-        hifi.onNewMixtape = { onNewMixtape?.invoke() }
-        hifi.onEditMixtape = { t -> onEditMixtape?.invoke(t) }
-        hifi.onSettings = { onOpenSettings?.invoke() }
-        hifi.onHaptic = { k -> haptic(k) }
-        hifi.volume = { volume() }
-        hifi.setVolume = { f -> setVolume(f) }
         Deck.onEvent = { e ->
             when (e) {
                 Deck.Event.KEY -> haptic(HapticFeedbackConstants.VIRTUAL_KEY)
@@ -116,12 +103,8 @@ class StageView(ctx: Context) : View(ctx) {
 
     fun libraryChanged() { slots = emptyList(); letters = emptyList(); layoutShelf(); invalidate() }
 
-    /** A mixtape was saved (or thrown away, [id] null): deck 2 shows it. */
-    fun mixtapeSaved(id: Long?) { hifi.showMixtape(id); invalidate() }
-
     /** Back on the folded screen with the shelf showing: return to the face. */
     fun back(): Boolean {
-        if (open && shelfOut) { shelfOut = false; Sfx.play(Sfx.S.DOOR_SHUT, 0.5f); invalidate(); return true }
         if (!open && viewTarget > 0.5f) { Deck.closeDoor(); invalidate(); return true }
         return false
     }
@@ -138,8 +121,8 @@ class StageView(ctx: Context) : View(ctx) {
         // turning the whole frame sideways left the type and the tape on their sides)
         stacked = nowOpen && w > h
         if (nowOpen && !open && oldw != 0) {
-            // Unfolding: home to the hi-fi, which comes on as you open it
-            swing = if (Prefs.doorSwing) 0f else 1f; swingFrom = SystemClock.uptimeMillis(); shelfOut = false; shelfT = 0f
+            // Unfolding: the door pops on its spring and swings open over the left half
+            swing = if (Prefs.doorSwing) 0f else 1f; swingFrom = SystemClock.uptimeMillis()
             Deck.doorShutQuietly(); view = 0f; viewTarget = 0f
             Sfx.play(Sfx.S.DOOR_OPEN, 0.8f)
         } else if (!nowOpen && open) {
@@ -180,13 +163,23 @@ class StageView(ctx: Context) : View(ctx) {
         // compartment on the right, meeting at the crease), and folded, the face fills the cover screen.
         // The parts keep clear of the camera and system bars; the metal runs to every edge.
         val Wf = fw.toFloat(); val Hf = fh.toFloat()
-        if (open) {
-            // the hi-fi fills the open screen, either way up; the shelf slides up over it when pulled out
-            hifi.layout(L, T, W, H, RectF(0f, 0f, Wf, Hf))
-            deck = PlayerGeom.face(L, T, W, H, RectF(0f, 0f, Wf, Hf))
-            val off = (1 - easeOut(shelfT)) * Hf
-            shelfBg.set(0f, off, Wf, Hf + off)
-            shelfArea.set(L + dp(12f), T + dp(22f) + off, L + W - dp(12f), T + H - dp(6f) + off)
+        if (open && stacked) {
+            val half = Hf / 2f
+            val g = dp(10f)
+            val bleed = RectF(0f, 0f, Wf, half)
+            deck = PlayerGeom.bay(L + g, T + g, W - g * 2, half - T - g * 2, bleed)
+            face = PlayerGeom.face(L + g, T + g, W - g * 2, half - T - g * 2, bleed)
+            shelfBg.set(0f, half, Wf, Hf)
+            shelfArea.set(L + dp(12f), half + dp(6f), L + W - dp(12f), T + H - dp(6f))
+        } else if (open) {
+            val half = Wf / 2f
+            val g = dp(10f)
+            val bleed = RectF(half, 0f, Wf, Hf)
+            val bw = Wf - pr - half - g * 2
+            deck = PlayerGeom.bay(half + g, T + g, bw, H - g * 2, bleed)
+            face = PlayerGeom.face(half + g, T + g, bw, H - g * 2, bleed)
+            shelfBg.set(0f, 0f, half, Hf)
+            shelfArea.set(L + dp(12f), T + dp(6f), half - dp(12f), T + H - dp(6f))
         } else {
             val v = easeOut(view)
             val off = v * Wf * 1.04f
@@ -303,8 +296,6 @@ class StageView(ctx: Context) : View(ctx) {
             if (abs(view - viewTarget) < 0.001f) view = viewTarget
         }
         if (swing < 1f) swing = ((now - swingFrom) / 750f).coerceIn(0f, 1f)
-        val st = if (shelfOut && open) 1f else 0f
-        shelfT += (st - shelfT) * (1 - exp(-dt / 0.09f)); if (abs(shelfT - st) < 0.002f) shelfT = st
         for (i in lean.indices) { leanV[i] += (-lean[i] * 90 - leanV[i] * 12) * dt; lean[i] += leanV[i] * dt * 6 }
         if (shake > 0) shake = max(0f, shake - dt * 6)
         for (k in proximity.keys.toList()) proximity[k] = (proximity[k] ?: 0f) * exp(-dt / 0.5f)
@@ -317,24 +308,17 @@ class StageView(ctx: Context) : View(ctx) {
         live.pressed = pressed; live.pressAge = now - pressedAt; live.proximity = proximity; live.lifting = lifting
         live.volume = volume(); live.volAge = now - volAt
         if (open) {
-            hifi.power = easeInOut(swing)
-            hifi.draw(c, dt, lifting)
-            if (shelfT > 0.002f) {
-                val scrim = Paint().apply { color = Color.BLACK.a(0.55f * shelfT) }
-                c.drawRect(0f, 0f, fw.toFloat(), fh.toFloat(), scrim)
+            if (swing >= 0.999f) {
                 drawShelf(c)
-                // the drawer's pull, to push it back in
-                val hy = shelfBg.top + pt + dp(9f)
-                val hp = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = android.graphics.LinearGradient(0f, hy - dp(3f), 0f, hy + dp(3f), intArrayOf(0xFFF4F5F6.toInt(), 0xFF9AA0A6.toInt(), 0xFF5D6268.toInt(), 0xFFC9CDD1.toInt()), floatArrayOf(0f, 0.45f, 0.55f, 1f), android.graphics.Shader.TileMode.CLAMP) }
-                c.drawRoundRect(fw / 2f - dp(36f), hy - dp(3f), fw / 2f + dp(36f), hy + dp(3f), dp(3f), dp(3f), hp)
-            }
+                painter.bay(c, G, live)
+            } else drawSwing(c, G, now, lifting)
         } else {
             drawShelf(c)
             painter.face(c, G, live)
         }
         // the tape in flight from the shelf
         val pend = Deck.pending
-        if (pend != null && lifting && !open) {
+        if (pend != null && lifting) {
             val sl = slots.firstOrNull { it.tape === pend }
             if (sl != null) {
                 val tt = easeOut(((now - Deck.pendingSince) / Deck.FLIGHT_MS.toFloat()).coerceIn(0f, 1f))
@@ -350,11 +334,59 @@ class StageView(ctx: Context) : View(ctx) {
             }
         }
         c.restore()
+        if (open && stacked) {
+            val cy = fh / 2f
+            val p = Paint().apply { shader = android.graphics.LinearGradient(0f, cy - dp(6f), 0f, cy + dp(6f), intArrayOf(0, 0x12FFFFFF, 0), null, android.graphics.Shader.TileMode.CLAMP) }
+            c.drawRect(0f, cy - dp(6f), fw.toFloat(), cy + dp(6f), p)
+        } else if (open) {
+            // the crease
+            val cx = fw / 2f
+            val p = Paint().apply { shader = android.graphics.LinearGradient(cx - dp(6f), 0f, cx + dp(6f), 0f, intArrayOf(0, 0x12FFFFFF, 0), null, android.graphics.Shader.TileMode.CLAMP) }
+            c.drawRect(cx - dp(6f), 0f, cx + dp(6f), fh.toFloat(), p)
+        }
 
         val busy = Deck.animating() || Deck.mode == Deck.Mode.PLAY || swing < 1f || shake > 0 || abs(view - viewTarget) > 0.001f ||
-            (open && (hifi.busy() || Deck.pending != null)) || (shelfT > 0.002f && shelfT < 0.998f) ||
             !scroller.isFinished || railWake > 0.01f || lean.any { abs(it) > 0.05f } || proximity.values.any { it > 0.02f } || (pressed != null && now - pressedAt < 200)
         if (busy) postInvalidateOnAnimation()
+    }
+
+    /** Unfolding is opening the door: the face swings on the crease out over the left half, and its inside becomes the shelf. */
+    private fun drawSwing(c: Canvas, G: PlayerGeom, now: Long, lifting: Boolean) {
+        val th = easeInOut(swing) * PI
+        val cs = cos(th).toFloat()
+        val shade = Paint()
+        painter.bay(c, G, live)
+        val W = fw.toFloat(); val H = fh.toFloat()
+        if (stacked) {
+            // the crease runs across: the face over the top half swings down onto the bottom half
+            val cy = H / 2f
+            shade.color = Color.BLACK.a(0.55f * (1 - swing)); c.drawRect(0f, 0f, W, cy, shade)
+            c.save()
+            c.translate(0f, cy); c.scale(1f, max(0.001f, abs(cs))); c.translate(0f, -cy)
+            if (cs > 0) {
+                face?.let { painter.face(c, it, live) }
+                shade.color = Color.BLACK.a(0.5f * (1 - cs)); c.drawRect(0f, 0f, W, cy, shade)
+            } else {
+                drawShelf(c)
+                shade.color = Color.BLACK.a(0.5f * (1 + cs)); c.drawRect(0f, cy, W, H, shade)
+            }
+            c.restore()
+            return
+        }
+        val cx = W / 2f
+        shade.color = Color.BLACK.a(0.55f * (1 - swing)); c.drawRect(cx, 0f, W, H, shade)
+        c.save()
+        c.translate(cx, 0f); c.scale(max(0.001f, abs(cs)), 1f); c.translate(-cx, 0f)
+        if (cs > 0) {
+            // the face, still shut over the compartment, turning away
+            face?.let { painter.face(c, it, live) }
+            shade.color = Color.BLACK.a(0.5f * (1 - cs)); c.drawRect(cx, 0f, W, H, shade)
+        } else {
+            // the inside of the door coming down onto the left half
+            drawShelf(c)
+            shade.color = Color.BLACK.a(0.5f * (1 + cs)); c.drawRect(0f, 0f, cx, H, shade)
+        }
+        c.restore()
     }
 
     private fun drawShelf(c: Canvas) {
@@ -438,37 +470,25 @@ class StageView(ctx: Context) : View(ctx) {
         val x = e.x; val y = e.y
         if (needsPermission) { if (e.action == MotionEvent.ACTION_UP) onAskPermission?.invoke(); return true }
         val G = deck ?: return true
-        if (open && shelfT < 0.5f && !shelfOut) {
-            when (e.actionMasked) {
-                MotionEvent.ACTION_DOWN -> { scroller.forceFinished(true); hifi.down(e); parent?.requestDisallowInterceptTouchEvent(true) }
-                MotionEvent.ACTION_MOVE -> hifi.move(e)
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> hifi.up(e)
-            }
-            invalidate(); return true
-        }
-        if (open && e.actionMasked == MotionEvent.ACTION_DOWN && y < shelfBg.top + pt + dp(26f) && abs(x - fw / 2f) < dp(70f)) {
-            back(); return true
-        }
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 scroller.forceFinished(true)
                 wakeLegends(G, x, y)
                 if (open && settingsLink.near(x, y, dp(6f))) { onOpenSettings?.invoke(); return true }
-                // the face's parts exist only folded; open, the pulled-out shelf covers the hi-fi
-                if (!open) {
+                if (!open || swing >= 0.999f) {
                     for (K in G.keys) if (K.rect.near(x, y, dp(4f))) {
                         pressed = K.key; pressedAt = SystemClock.uptimeMillis(); pressKey(K.key); invalidate(); return true
                     }
                 }
-                if (!open) for (T in G.legends) if (x > T.x - dp(6f) && x < T.x + T.w && y > T.y - T.h && y < T.y + T.h * 0.4f) {
+                for (T in G.legends) if (x > T.x - dp(6f) && x < T.x + T.w && y > T.y - T.h && y < T.y + T.h * 0.4f) {
                     if (!Deck.hold) Sfx.play(Sfx.S.STOP, 0.35f)
                     Deck.toggle(T.id); proximity[T.id] = 1f; invalidate(); return true
                 }
-                if (!open) G.hold?.let { if (it.near(x, y, dp(10f))) { Sfx.play(Sfx.S.WIND_KEY, 0.5f); Deck.toggle("hold"); invalidate(); return true } }
-                if (!open) G.battery?.let { if (it.near(x, y, dp(4f))) { Sfx.play(Sfx.S.DOOR_OPEN, 0.5f); onOpenSettings?.invoke(); return true } }
-                if (!open) G.wheel?.let { if (it.near(x, y, dp(16f))) { wheelFrom = y to volume(); parent?.requestDisallowInterceptTouchEvent(true); return true } }
+                G.hold?.let { if (it.near(x, y, dp(10f))) { Sfx.play(Sfx.S.WIND_KEY, 0.5f); Deck.toggle("hold"); invalidate(); return true } }
+                G.battery?.let { if (it.near(x, y, dp(4f))) { Sfx.play(Sfx.S.DOOR_OPEN, 0.5f); onOpenSettings?.invoke(); return true } }
+                G.wheel?.let { if (it.near(x, y, dp(16f))) { wheelFrom = y to volume(); parent?.requestDisallowInterceptTouchEvent(true); return true } }
                 val inWin = x > G.win.left && x < G.win.right && y > G.win.top && y < G.win.bottom
-                if (!open && inWin && Deck.door < 0.05f && Deck.pending == null && (open || view < 0.5f)) {
+                if (inWin && Deck.door < 0.05f && Deck.pending == null && (open || view < 0.5f)) {
                     for (left in listOf(true, false)) {
                         val (hx, hy) = hub(G, left)
                         if (hypot(x - hx, y - hy) < Deck.PACK_R * G.k * 1.05f && !Deck.hold) {
@@ -552,11 +572,6 @@ class StageView(ctx: Context) : View(ctx) {
         for (j in lean.indices) {
             val d = (j - i) / cols
             if (j != i && (j - i) % cols == 0 && d != 0) leanV[j] += -kotlin.math.sign(d.toFloat()) * dp(9f) / abs(d).toFloat().pow(1f)
-        }
-        if (open) {
-            // out of the pulled-out shelf and into deck 1; the shelf slides back into its drawer
-            hifi.flightFrom.set(sl.rect)
-            shelfOut = false
         }
         Deck.load(sl.tape, direct = open)
         invalidate()
