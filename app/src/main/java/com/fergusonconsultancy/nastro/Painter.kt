@@ -1187,7 +1187,7 @@ class Painter(ctx: Context) {
     }
 
     /**
-     * The battery bay (13 Nov 2026): the WM-EX610 ran on one AA in the body. A smaller hole through
+     * The battery bay (13 Nov 2026): one AA, matching the face's 1.5V AA battery door. A smaller hole through
      * the same lip, its contacts at either end (a coil spring at the negative, a plate at the
      * positive) and the cell lying between them, drawn to the tape's scale.
      */

@@ -18,7 +18,7 @@ Mechack's idea, 25 Oct. The Fold's hinge is on the left, so the cover screen sit
 | Unfolded | Main, left half | The inside of the door, hinge knuckles at the crease: the shelf |
 | Folding | Cover | The door has shut: a heavy click and a small settle |
 
-**Departure, on purpose:** opening a real Walkman stops the tape. Here it plays on with the door open, because unfolding to browse would otherwise cut the music (Mechack's tightness standard: friction is never enjoyable). Choosing another tape stops it.
+**Departure, on purpose (25 Oct; reversed 13 Nov):** opening a real Walkman stops the tape. At first it played on with the door open, so unfolding to browse wouldn't cut the music. On 13 Nov Mechack called that illogical, and the door now stops the tape (see the seventh review).
 
 ## Principle by principle
 
@@ -145,7 +145,7 @@ Mechack: back to option 1, the Walkman on both screens. What he wants is the ope
 
 **The door's logic (his choice of three):** unfolding opens the door, so the tape stops where it is, its play key popping up. With the door open you can turn the tape over, wind it by hand, or choose another, which drops in; folding shuts the door and plays. The keys and transport do nothing with the door open; play pressed from the notification is remembered for when it shuts. The shelf's heading says "fold shut to play" while a tape waits. A door left open for more than 30 minutes shuts without playing.
 
-**The face is the door.** Its readout, keys and switches are on its outside, so with it open they have swung away: the body half is all compartment, the tape at the largest size that fits and never bigger than a real one (read from the screen's own pixels per millimetre), and at its foot the battery bay, one AA lying between its coil spring and plate, as the WM-EX610 took.
+**The face is the door.** Its readout, keys and switches are on its outside, so with it open they have swung away: the body half is all compartment, the tape at the largest size that fits and never bigger than a real one (read from the screen's own pixels per millimetre), and at its foot the battery bay, one AA lying between its coil spring and plate, matching the face's 1.5V AA battery door (that the WM-EX610 itself took one AA is general knowledge, not confirmed).
 
 **The fold is the hinge.** Two chrome knuckles on their pin sit on the crease, each with a leaf screwed to the door and one to the body.
 
