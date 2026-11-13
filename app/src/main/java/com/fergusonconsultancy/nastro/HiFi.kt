@@ -62,8 +62,6 @@ class HiFi(ctx: Context, private val painter: Painter) {
     var onEditMixtape: ((Tape) -> Unit)? = null
     var onSettings: (() -> Unit)? = null
     var onHaptic: ((Int) -> Unit)? = null
-    /** A door has shut on its tape: the stage's clunk (sound and haptic). */
-    var onClunk: (() -> Unit)? = null
     var volume: () -> Float = { 0.7f }
     var setVolume: (Float) -> Unit = {}
 
@@ -163,68 +161,17 @@ class HiFi(ctx: Context, private val painter: Painter) {
     val flightFrom = RectF()
     var power = 1f
 
-    // ---- the doors and the hinge (12 Nov 2026) --------------------------------------------------
-    // Mechack: the cassette doors open with the hinge itself, so unfolding the phone opens the deck.
-    // The phone's hinge angle drives both doors: half open, they are half open; flat, they lie fully
-    // open with the tapes in their holders. Play, or a tap on a door, shuts it with a clunk. Folding
-    // part way again hands the doors back to the hinge.
-    /** The hinge angle in degrees from the phone's sensor, or -1 where the phone has none. */
-    var hinge = -1f
-    private var hingeOpen = 0f
-    private var shut1 = false; private var shut2 = false
-    private var o1 = 0f; private var o2 = 0f              // how far each door stands open, 0..1
-    private var openedSound = false
-    private var flatSeen = false
-    private val MAX_TILT = 38f                           // degrees: a front-loading door's full swing
-    private val warp = android.graphics.Matrix()
-    private val src = FloatArray(8); private val dst = FloatArray(8)
-
-    /** The phone has just been unfolded: both doors go back to following the hinge. */
-    fun unfolded() { shut1 = false; shut2 = false; o1 = 0f; o2 = 0f; hingeOpen = 0f; openedSound = false; flatSeen = false }
-
-    private fun doors(dt: Float) {
-        // Below about 20° the inner screen is dark anyway; the doors reach fully open as the phone lies flat
-        val target = if (hinge >= 0f) ((hinge - 20f) / 155f).coerceIn(0f, 1f) else power
-        hingeOpen += (target - hingeOpen) * (1 - exp(-dt / 0.05f))
-        // folding back from flat hands the doors to the hinge again; a door shut while half open stays shut
-        if (hinge >= 165f) flatSeen = true
-        if (flatSeen && hinge in 0f..150f) { shut1 = false; shut2 = false; flatSeen = false }
-        val t1 = if (shut1) 0f else hingeOpen; val t2 = if (shut2) 0f else hingeOpen
-        // a door falls open on its damper; it is pushed shut quickly
-        o1 += (t1 - o1) * (1 - exp(-dt / (if (t1 < o1 && shut1) 0.05f else 0.09f)))
-        o2 += (t2 - o2) * (1 - exp(-dt / (if (t2 < o2 && shut2) 0.05f else 0.09f)))
-        if (abs(o1 - t1) < 0.002f) o1 = t1; if (abs(o2 - t2) < 0.002f) o2 = t2
-        if (!openedSound && hingeOpen > 0.9f) { openedSound = true; Sfx.play(Sfx.S.DOOR_OPEN, 0.7f) }
-        if (hingeOpen < 0.5f) openedSound = false
-    }
-
-    private fun shut(which: Int) {
-        if (which == 1) { if (shut1 || o1 < 0.05f) return; shut1 = true } else { if (shut2 || o2 < 0.05f) return; shut2 = true }
-        Sfx.play(Sfx.S.DOOR_SHUT, 0.8f); onClunk?.invoke()
-    }
-
-    /** A tape is on its way into deck 1: its door closes over it as it seats. */
-    fun seat1() { shut1 = true }
-
-    private fun reopen(which: Int) {
-        if (which == 1) shut1 = false else shut2 = false
-        Sfx.play(Sfx.S.DOOR_OPEN, 0.7f); onHaptic?.invoke(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
-        // with the phone flat, the hinge holds the doors open; with no hinge sensor, open fully
-        if (hinge < 0f) hingeOpen = 1f
-    }
-
     private fun mixes(): List<Tape> = Library.tapes.filter { it.mix } + Library.BLANK
     private fun deck2Tape(): Tape { val m = mixes(); d2 = d2.coerceIn(0, m.size - 1); return m[d2] }
 
     /** True while something on the stack is still moving. */
-    fun busy(): Boolean = abs(o1 - (if (shut1) 0f else hingeOpen)) > 0.002f || abs(o2 - (if (shut2) 0f else hingeOpen)) > 0.002f || mL > 0.01f || mR > 0.01f || mB > 0.01f || pkL > 0.01f || pkR > 0.01f || !scroller.isFinished ||
+    fun busy(): Boolean = mL > 0.01f || mR > 0.01f || mB > 0.01f || pkL > 0.01f || pkR > 0.01f || !scroller.isFinished ||
         (pressedId != null && SystemClock.uptimeMillis() - pressedAt < 250)
 
     // ---- drawing ------------------------------------------------------------------------------
     fun draw(c: Canvas, dt: Float, lifting: Boolean) {
         if (scroller.computeScrollOffset()) spineScroll = scroller.currX.toFloat()
         measure(dt)
-        doors(dt)
         room(c)
         speaker(c, spkL); speaker(c, spkR)
         unit(c, drawerR); drawer(c)
@@ -296,7 +243,7 @@ class HiFi(ctx: Context, private val painter: Painter) {
         label(c, "NASTRO", X(22f), Y(16f), 11f * u, GOLD, 1f, Paint.Align.LEFT, 5f * u)
         label(c, "DOUBLE CASSETTE DECK  ·  AUTO REVERSE", X(90f), Y(16f), 7f * u, GOLD, 0.6f, Paint.Align.LEFT, 2f * u)
         val tape1 = if (lifting) null else Deck.tape
-        doorWith(c, door1, win1, "DECK 1  ·  PLAY", o1) { winR ->
+        doorWith(c, door1, win1, "DECK 1  ·  PLAY") { winR ->
             if (tape1 != null) {
                 val k = min(winR.width() * 0.9f / PlayerGeom.CW, winR.height() * 0.86f / PlayerGeom.CH)
                 c.save(); c.translate(winR.centerX(), winR.centerY() + winR.height() * 0.04f)
@@ -308,7 +255,7 @@ class HiFi(ctx: Context, private val painter: Painter) {
             }
         }
         val t2 = deck2Tape()
-        doorWith(c, door2, win2, if (t2 === Library.BLANK) "DECK 2  ·  REC" else "DECK 2  ·  MIXTAPES", o2) { winR ->
+        doorWith(c, door2, win2, if (t2 === Library.BLANK) "DECK 2  ·  REC" else "DECK 2  ·  MIXTAPES") { winR ->
             val k = min(winR.width() * 0.9f / PlayerGeom.CW, winR.height() * 0.86f / PlayerGeom.CH)
             c.save(); c.translate(winR.centerX(), winR.centerY() + winR.height() * 0.04f); c.scale(k, k)
             painter.cassette(c, t2, false, 1f)
@@ -333,45 +280,7 @@ class HiFi(ctx: Context, private val painter: Painter) {
         c.drawCircle(cx, cy + (if (pressed) 0.8f * u else 0f), rr * 0.48f, p); p.shader = null
     }
 
-    /**
-     * A front-loading door: hinged along its foot, it tilts its top towards you as it opens, and the
-     * tape rides in the holder on its back, seen through the window. Behind it, as it falls open, the
-     * well: the spindles the hubs drop onto, the head and capstans.
-     */
-    private inline fun doorWith(c: Canvas, d: RectF, w: RectF, caption: String, ajar: Float, inside: (RectF) -> Unit) {
-        val th = Math.toRadians((ajar * MAX_TILT).toDouble())
-        // the well behind the door
-        p.shader = LinearGradient(0f, d.top, 0f, d.bottom, 0xFF020203.toInt(), 0xFF0E1013.toInt(), Shader.TileMode.CLAMP)
-        c.drawRoundRect(d, 4 * u, 4 * u, p); p.shader = null
-        if (ajar > 0.01f) {
-            val my = w.centerY()
-            for (dx in floatArrayOf(-0.21f, 0.21f)) {
-                val sx = w.centerX() + dx * w.width()
-                p.shader = RadialGradient(sx - 1.5f * u, my - 1.5f * u, 7f * u, intArrayOf(0xFFE9E4DA.toInt(), 0xFF8F8A80.toInt()), null, Shader.TileMode.CLAMP)
-                c.drawCircle(sx, my, 5.5f * u, p); p.shader = null
-                p.color = 0xFF111111.toInt()
-                for (k in 0 until 6) { val a = k * PI / 3; c.drawCircle(sx + cos(a).toFloat() * 4.2f * u, my + sin(a).toFloat() * 4.2f * u, 1f * u, p) }
-            }
-            // the head and the capstans at the well's foot, where the tape's open edge meets them
-            val hy = w.bottom + 4 * u
-            p.shader = LinearGradient(w.centerX() - 9 * u, 0f, w.centerX() + 9 * u, 0f, intArrayOf(0xFF8D949B.toInt(), 0xFFF1F3F5.toInt(), 0xFF8D949B.toInt()), null, Shader.TileMode.CLAMP)
-            r.set(w.centerX() - 9 * u, hy - 5 * u, w.centerX() + 9 * u, hy + 3 * u); c.drawRoundRect(r, 1.5f * u, 1.5f * u, p); p.shader = null
-            p.color = 0xFFB9BEC4.toInt()
-            for (dx in floatArrayOf(-0.33f, 0.33f)) c.drawCircle(w.centerX() + dx * w.width(), hy - 1 * u, 1.6f * u, p)
-            // the door's own shadow falling back into the well
-            p.shader = LinearGradient(0f, d.bottom - d.height() * cos(th).toFloat(), 0f, d.bottom, intArrayOf(0, Color.BLACK.a(0.75f * ajar)), null, Shader.TileMode.CLAMP)
-            c.drawRect(d, p); p.shader = null
-        }
-        // the door, warped about its foot: the top comes down and towards you, so it widens
-        c.save()
-        if (ajar > 0.001f) {
-            val topY = d.bottom - d.height() * cos(th).toFloat()
-            val spread = d.width() * 0.11f * sin(th).toFloat()
-            src[0] = d.left; src[1] = d.top; src[2] = d.right; src[3] = d.top; src[4] = d.right; src[5] = d.bottom; src[6] = d.left; src[7] = d.bottom
-            dst[0] = d.left - spread; dst[1] = topY; dst[2] = d.right + spread; dst[3] = topY; dst[4] = d.right; dst[5] = d.bottom; dst[6] = d.left; dst[7] = d.bottom
-            warp.setPolyToPoly(src, 0, dst, 0, 4)
-            c.concat(warp)
-        }
+    private inline fun doorWith(c: Canvas, d: RectF, w: RectF, caption: String, inside: (RectF) -> Unit) {
         p.shader = null; p.color = 0xFF0B0C0E.toInt(); c.drawRoundRect(d, 4 * u, 4 * u, p)
         s.shader = null; s.strokeWidth = 1f * u; s.color = 0xFF3A3D42.toInt(); c.drawRoundRect(d, 4 * u, 4 * u, s)
         r.set(d.left + 4 * u, d.top + 4 * u, d.right - 4 * u, d.bottom - 4 * u)
@@ -382,14 +291,11 @@ class HiFi(ctx: Context, private val painter: Painter) {
         inside(w)
         p.shader = LinearGradient(w.left, w.top, w.right, w.bottom, intArrayOf(Color.WHITE.a(0.16f), Color.WHITE.a(0.03f), 0, Color.WHITE.a(0.05f)), floatArrayOf(0f, 0.35f, 0.36f, 1f), Shader.TileMode.CLAMP)
         c.drawRect(w, p)
-        p.shader = LinearGradient(0f, w.top, 0f, w.top + w.height() * 0.25f, Color.BLACK.a(0.5f * (1 - ajar)), 0, Shader.TileMode.CLAMP); c.drawRect(w, p)
+        p.shader = LinearGradient(0f, w.top, 0f, w.top + w.height() * 0.25f, Color.BLACK.a(0.5f), 0, Shader.TileMode.CLAMP); c.drawRect(w, p)
         p.shader = null
         c.restore()
         s.strokeWidth = 0.8f * u; s.color = Color.WHITE.a(0.12f); c.drawRoundRect(w, 3 * u, 3 * u, s)
         label(c, caption, d.centerX(), d.top + d.height() * 0.88f, 7f * u, GOLD, 0.7f, Paint.Align.CENTER, 2f * u)
-        // tilted up, the door's face turns towards the room's light
-        if (ajar > 0.01f) { p.color = Color.WHITE.a(0.07f * ajar); c.drawRoundRect(d, 4 * u, 4 * u, p) }
-        c.restore()
     }
 
     /** A piano key: ivory, its top edge catching the light; pressed, it sinks and darkens. */
@@ -715,13 +621,12 @@ class HiFi(ctx: Context, private val painter: Painter) {
         for (K in keys1) if (K.rect.hit(x, y)) {
             press(K.id)
             when (K.id) {
-                // eject opens the door; with it already open, the shelf comes out
-                "eject" -> if (o1 < 0.5f) reopen(1) else { Sfx.play(Sfx.S.DOOR_OPEN, 0.6f); onOpenShelf?.invoke() }
+                "eject" -> { Sfx.play(Sfx.S.DOOR_OPEN, 0.6f); onOpenShelf?.invoke() }
                 "rew" -> onKey?.invoke(Deck.Key.REW)
                 "ff" -> onKey?.invoke(Deck.Key.FF)
                 // stopped, stop has nothing to do: the hi-fi's doors are not the Walkman's
                 "stop" -> if (Deck.mode != Deck.Mode.STOP) onKey?.invoke(Deck.Key.STOP)
-                "play" -> { shut(1); onKey?.invoke(Deck.Key.PLAY) }
+                "play" -> onKey?.invoke(Deck.Key.PLAY)
             }
             return true
         }
@@ -730,8 +635,8 @@ class HiFi(ctx: Context, private val painter: Painter) {
             val t2 = deck2Tape()
             when (K.id) {
                 "rec" -> onNewMixtape?.invoke()
-                "play2" -> if (t2 !== Library.BLANK) { shut(2); flightFrom.set(win2); Deck.load(t2, direct = true) } else onNewMixtape?.invoke()
-                "edit" -> if (o2 < 0.5f) reopen(2) else if (t2 !== Library.BLANK) onEditMixtape?.invoke(t2) else onNewMixtape?.invoke()
+                "play2" -> if (t2 !== Library.BLANK) { flightFrom.set(win2); Deck.load(t2, direct = true) } else onNewMixtape?.invoke()
+                "edit" -> if (t2 !== Library.BLANK) onEditMixtape?.invoke(t2) else onNewMixtape?.invoke()
             }
             return true
         }
@@ -748,8 +653,8 @@ class HiFi(ctx: Context, private val painter: Painter) {
             vt?.recycle(); vt = android.view.VelocityTracker.obtain().also { it.addMovement(e) }
             return true
         }
-        if (door1.hit(x, y, 0f)) { dragging = "win1"; return true }
-        if (door2.hit(x, y, 0f)) { dragging = "win2"; return true }
+        if (win1.hit(x, y, 0f)) { dragging = "win1"; return true }
+        if (win2.hit(x, y, 0f)) { dragging = "win2"; return true }
         return true
     }
 
@@ -784,7 +689,7 @@ class HiFi(ctx: Context, private val painter: Painter) {
             "spines" -> {
                 if (moved < dp(8f)) {
                     spines.firstOrNull { it.second.contains(x, y) }?.let { (tp, R) ->
-                        flightFrom.set(R); shut1 = true; Deck.load(tp, direct = true)
+                        flightFrom.set(R); Deck.load(tp, direct = true)
                     }
                 } else {
                     vt?.computeCurrentVelocity(1000)
@@ -793,18 +698,13 @@ class HiFi(ctx: Context, private val painter: Painter) {
                 }
                 vt?.recycle(); vt = null
             }
-            "win1" -> {
-                if (abs(dx) > dp(40f) && abs(dx) > abs(dy) * 1.3f) Deck.turnOver()
-                else if (moved < dp(8f) && o1 > 0.3f) shut(1)        // push the open door shut
-            }
+            "win1" -> if (abs(dx) > dp(40f) && abs(dx) > abs(dy) * 1.3f) Deck.turnOver()
             "win2" -> {
                 if (abs(dx) > dp(40f) && abs(dx) > abs(dy) * 1.3f) {
                     // step through the mixtapes waiting by deck 2
                     val n = mixes().size
                     d2 = ((d2 + (if (dx < 0) 1 else -1)) % n + n) % n
                     Sfx.play(Sfx.S.SEAT, 0.35f); onHaptic?.invoke(android.view.HapticFeedbackConstants.CLOCK_TICK)
-                } else if (moved < dp(8f) && o2 > 0.3f) {
-                    shut(2)
                 } else if (moved < dp(8f)) {
                     val t2 = deck2Tape()
                     if (t2 === Library.BLANK) onNewMixtape?.invoke() else onEditMixtape?.invoke(t2)
