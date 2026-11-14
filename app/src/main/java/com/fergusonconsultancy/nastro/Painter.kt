@@ -1143,7 +1143,10 @@ class Painter(ctx: Context) {
         r.set(L.left - dp(2f), L.top - dp(2f), L.right + dp(2f), L.bottom + dp(2f))
         p.shader = LinearGradient(L.left, L.top, L.right, L.bottom, intArrayOf(0xFFF4F6F8.toInt(), 0xFF8B939C.toInt(), 0xFFD9DEE3.toInt()), null, Shader.TileMode.CLAMP)
         c.drawRoundRect(r, rad + dp(2f), rad + dp(2f), p); p.shader = null
-        fill(0xFF0C0F13.toInt()); c.drawRoundRect(L, rad, rad, p)
+        // 14 Nov 2026, Mechack: one tape, seen two ways. Behind the lens is the open compartment exactly as
+        // unfolding shows it: the same floor, the tape on the same spindles, through clear glass
+        p.shader = LinearGradient(L.left, L.top, L.right, L.bottom, 0xFF3A424B.toInt(), 0xFF1D2329.toInt(), Shader.TileMode.CLAMP)
+        c.drawRoundRect(L, rad, rad, p); p.shader = null
         c.save(); path.reset(); path.addRoundRect(L, rad, rad, Path.Direction.CW); c.clipPath(path)
         val tape = Deck.tape
         if (tape != null && !lifting) {
@@ -1151,16 +1154,16 @@ class Painter(ctx: Context) {
             val fl = if (Deck.flipping) cos(Deck.flip * PI).toFloat() else 1f
             c.rotate(G.rot); c.scale(G.k, G.k * max(0.02f, kotlin.math.abs(fl)))
             val facing = if (Deck.flipping && Deck.flip > 0.5f) (if (Deck.facing == 'A') 'B' else 'A') else Deck.facing
-            turn = G.rot; cassette(c, tape, true, detail, facing); turn = 0f
+            turn = G.rot; cassette(c, tape, true, detail, facing, spindle = true, shadow = 5f); turn = 0f
             c.restore()
         }
-        fill(0x6B101822); c.drawRect(L, p)
+        fill(0x1A101822); c.drawRect(L, p)
         // the glass's glare slides as the phone tilts
         val gd = (if (G.wide) Light.y else Light.x) * 0.2f
         p.shader = if (G.wide) LinearGradient(0f, L.top, 0f, L.bottom, intArrayOf(0, Color.WHITE.a(0.2f), 0), floatArrayOf(0f, 0.22f + gd, 0.34f + gd), Shader.TileMode.CLAMP)
             else LinearGradient(L.left, 0f, L.right, 0f, intArrayOf(0, Color.WHITE.a(0.2f), 0), floatArrayOf(0f, 0.22f + gd, 0.34f + gd), Shader.TileMode.CLAMP)
         c.drawRect(L, p)
-        p.shader = RadialGradient(L.centerX(), L.centerY(), max(L.width(), L.height()) * 0.6f, intArrayOf(0, Color.BLACK.a(0.45f)), floatArrayOf(0.3f, 1f), Shader.TileMode.CLAMP); c.drawRect(L, p)
+        p.shader = RadialGradient(L.centerX(), L.centerY(), max(L.width(), L.height()) * 0.6f, intArrayOf(0, Color.BLACK.a(0.22f)), floatArrayOf(0.3f, 1f), Shader.TileMode.CLAMP); c.drawRect(L, p)
         p.shader = null
         c.restore()
     }
