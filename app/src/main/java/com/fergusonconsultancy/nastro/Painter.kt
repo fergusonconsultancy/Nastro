@@ -86,8 +86,8 @@ class PlayerGeom private constructor(val kind: Kind, val x: Float, val w: Float)
          * [bleed], when given, is the body: the whole screen, its corners the phone's own.
          * Wider than tall (the cover screen on its side), the face is laid out sideways.
          */
-        fun face(x: Float, y: Float, w: Float, h: Float, bleed: RectF? = null, mm: Float = 0f): PlayerGeom =
-            if (w > h * 1.05f) faceWide(x, y, w, h, bleed, mm) else faceTall(x, y, w, h, bleed, mm)
+        fun face(x: Float, y: Float, w: Float, h: Float, bleed: RectF? = null, mm: Float = 0f, anchor: Pair<Float, Float>? = null): PlayerGeom =
+            if (w > h * 1.05f) faceWide(x, y, w, h, bleed, mm) else faceTall(x, y, w, h, bleed, mm, anchor)
 
         /**
          * The cover screen on its side (11 Nov 2026): the lid with its lens takes the left, the
@@ -134,13 +134,13 @@ class PlayerGeom private constructor(val kind: Kind, val x: Float, val w: Float)
             battery = RectF(st.left + st.width() * 0.72f, st.top + st.height() * 0.06f, st.right, st.top + st.height() * 0.94f)
         }
 
-        private fun faceTall(x: Float, y: Float, w: Float, h: Float, bleed: RectF? = null, mm: Float = 0f): PlayerGeom {
+        private fun faceTall(x: Float, y: Float, w: Float, h: Float, bleed: RectF? = null, mm: Float = 0f, anchor: Pair<Float, Float>? = null): PlayerGeom {
             // Too squat for the whole face at this width (a split window): narrow it, centred, so nothing falls off the foot
             if (h < 1.7f * w) { val w2 = h / 1.7f; return faceTallFit(x + (w - w2) / 2, y, w2, h, bleed, mm) }
-            return faceTallFit(x, y, w, h, bleed, mm)
+            return faceTallFit(x, y, w, h, bleed, mm, anchor)
         }
 
-        private fun faceTallFit(x: Float, y: Float, w: Float, h: Float, bleed: RectF? = null, mm: Float = 0f): PlayerGeom = PlayerGeom(Kind.FACE, x, w).apply {
+        private fun faceTallFit(x: Float, y: Float, w: Float, h: Float, bleed: RectF? = null, mm: Float = 0f, anchor: Pair<Float, Float>? = null): PlayerGeom = PlayerGeom(Kind.FACE, x, w).apply {
             // 14 Nov 2026: the controls give up a little height so the lid, and the tape behind its lens, can
             // grow to the real thing's size: the hubs 42.5 mm apart, as in your hand
             // 14 Nov 2026, Mechack: the readout up, the keys and switches down, the space between to the lid
@@ -153,7 +153,15 @@ class PlayerGeom private constructor(val kind: Kind, val x: Float, val w: Float)
             val ld = RectF(x + 0.045f * w, lcd.bottom + 0.045f * w, x + 0.955f * w, lcd.bottom + 0.045f * w + lidH)
             lid = ld
             k = min(ld.height() * 0.74f / 74f, ld.width() * 0.62f / 30f).let { if (mm > 0f) min(it, mm) else it }
-            val lcx = ld.centerX(); val lcy = ld.top + ld.height() * 0.455f
+            var lcx = ld.centerX(); var lcy = ld.top + ld.height() * 0.455f
+            // 14 Nov 2026, Mechack: the tape behind the lens must line up with the tape in the open
+            // compartment. Folded, the door lies over the compartment, the hinge on the left, so the tape is
+            // on the same spot: as far from the hinge edge and from the top as it is unfolded. The lens
+            // follows it, kept on the lid and clear of the engraving.
+            if (anchor != null && bleed != null) {
+                lcx = (bleed.left + anchor.first - REEL_Y * k).coerceIn(ld.left + 15 * k + 0.04f * w, ld.right - 15 * k - 0.04f * w)
+                lcy = (bleed.top + anchor.second).coerceIn(ld.top + 37 * k + ld.height() * 0.075f, ld.bottom - 37 * k - ld.height() * 0.14f)
+            }
             val ln = RectF(lcx - 15 * k, lcy - 37 * k, lcx + 15 * k, lcy + 37 * k)
             lens = ln
             tx = lcx + REEL_Y * k; ty = lcy
@@ -186,7 +194,7 @@ class PlayerGeom private constructor(val kind: Kind, val x: Float, val w: Float)
         // head assembly along its open edge, the AA bay below, the pair centred in the body.
         private const val CLEAR = 1.2f      // mm round the shell
         private const val HEADS = 6.4f      // mm of head plate, pinch roller arm and capstan beyond the shell's foot
-        private const val CELL = 20.5f      // mm: the AA (14.5) and its clearance
+        private const val CELL = 22f        // mm: the gumstick cell (16.7 wide) and its clearance
         private const val GAP = 4f          // mm of body between the two holes
         private const val LIP = 2.6f        // mm: each hole's raised lip
 
@@ -1208,7 +1216,7 @@ class Painter(ctx: Context) {
             fill(Color.BLACK.a(0.22f)); c.drawRect(B.left + B.width() * 0.18f, yy, B.right - B.width() * 0.18f, yy + dp(0.8f), p)
             fill(Color.WHITE.a(0.35f)); c.drawRect(B.left + B.width() * 0.18f, yy + dp(0.8f), B.right - B.width() * 0.18f, yy + dp(1.3f), p)
         }
-        engrave(c, "1.5V AA", B.centerX(), B.top + B.height() * 0.86f, fs * 0.82f, F, Paint.Align.CENTER, 0.12f)
+        engrave(c, "1.2V NI-MH", B.centerX(), B.top + B.height() * 0.86f, fs * 0.82f, F, Paint.Align.CENTER, 0.12f)
     }
 
     // ---- the open compartment: the tape in all its glory --------------------------------------------
@@ -1315,34 +1323,36 @@ class Painter(ctx: Context) {
         // the cell, in millimetres, lying along the bay
         val k = G.k
         c.save(); c.translate(B.centerX(), B.centerY()); if (!G.wide) c.rotate(0f) else c.rotate(90f); c.scale(k, k)
-        val L = 50.5f; val D = 14.5f
+        // 14 Nov 2026, Mechack: the Walkman's own battery, the flat "gumstick" NiMH (about 67 × 16.7 × 6 mm)
+        val L = 66.8f; val D = 16.7f
         // contacts: a coil spring at the negative end, a plate at the positive
         s.shader = null; s.strokeWidth = 0.7f; s.color = 0xFFC9CED4.toInt()
-        val sx0 = -L / 2 - 4.6f
-        path.reset(); path.moveTo(sx0, -D * 0.3f)
-        for (i in 0..7) { val xx = sx0 + i * 0.62f; path.lineTo(xx + 0.31f, if (i % 2 == 0) D * 0.3f else -D * 0.3f) }
+        val sx0 = -L / 2 - 2.6f
+        path.reset(); path.moveTo(sx0, -D * 0.22f)
+        for (i in 0..5) { val xx = sx0 + i * 0.42f; path.lineTo(xx + 0.21f, if (i % 2 == 0) D * 0.22f else -D * 0.22f) }
         c.drawPath(path, s)
-        fill(0xFFB9BEC4.toInt()); r.set(L / 2 + 0.6f, -D * 0.32f, L / 2 + 2.2f, D * 0.32f); c.drawRect(r, p)
+        fill(0xFFB9BEC4.toInt()); r.set(L / 2 + 0.2f, -D * 0.25f, L / 2 + 1.2f, D * 0.25f); c.drawRect(r, p)
         // its shadow on the floor, spreading and falling away as the spring lifts it
         fill(Color.BLACK.a(0.5f - 0.15f * pop)); p.setShadowLayer(2.2f + 3.5f * pop, 0.6f + 1.4f * pop, 1.2f + 2.6f * pop, Color.BLACK.a(0.8f - 0.2f * pop))
         r.set(-L / 2, -D / 2, L / 2, D / 2); c.drawRoundRect(r, 1.5f, 1.5f, p); p.clearShadowLayer()
         // risen: nearer the eye, so a little larger and up the screen
         c.translate(-0.8f * pop, -1.6f * pop); c.scale(1f + 0.06f * pop, 1f + 0.06f * pop)
-        // the wrapper: a cylinder, lit along its top
-        p.shader = LinearGradient(0f, -D / 2, 0f, D / 2, intArrayOf(0xFF0E3B26.toInt(), 0xFF2F8A5C.toInt(), 0xFF0B2A1B.toInt(), 0xFF051209.toInt()), floatArrayOf(0f, 0.28f, 0.7f, 1f), Shader.TileMode.CLAMP)
-        r.set(-L / 2, -D / 2, L / 2 - 1.2f, D / 2); c.drawRoundRect(r, 1.2f, 1.2f, p)
-        // a champagne band and the printing
-        p.shader = LinearGradient(0f, -D / 2, 0f, D / 2, intArrayOf(0xFF6B5A3C.toInt(), 0xFFEBD9B4.toInt(), 0xFF8A734C.toInt(), 0xFF3B3122.toInt()), floatArrayOf(0f, 0.3f, 0.7f, 1f), Shader.TileMode.CLAMP)
-        c.drawRect(L * 0.12f, -D / 2, L * 0.24f, D / 2, p); p.shader = null
-        print(c, "1.5V  AA", -L * 0.12f, D * 0.14f, 4.2f, 0xFFD9BB86.toInt(), true, Paint.Align.CENTER, 0.5f)
-        // the positive nub, and the flat negative end
-        p.shader = LinearGradient(0f, -2.8f, 0f, 2.8f, intArrayOf(0xFFF4F5F6.toInt(), 0xFF8D949B.toInt(), 0xFF4D5258.toInt()), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
-        r.set(L / 2 - 1.4f, -D * 0.42f, L / 2 - 0.2f, D * 0.42f); c.drawRect(r, p)
-        r.set(L / 2 - 0.3f, -2.6f, L / 2 + 0.6f, 2.6f); c.drawRoundRect(r, 0.4f, 0.4f, p)
-        r.set(-L / 2 - 0.4f, -D * 0.44f, -L / 2 + 0.5f, D * 0.44f); c.drawRect(r, p); p.shader = null
-        // moulded polarity marks on the floor beyond the ends
-        print(c, "−", sx0 - 2.6f, 1.6f, 5f, 0x66FFFFFF, true, Paint.Align.CENTER, 0f)
-        print(c, "+", L / 2 + 4.6f, 1.6f, 5f, 0x66FFFFFF, true, Paint.Align.CENTER, 0f)
+        // the pack: flat, its long edges rounded over, in the lime green these packs wear, lit along its upper edge
+        p.shader = LinearGradient(0f, -D / 2, 0f, D / 2, intArrayOf(0xFFC6EC7A.toInt(), 0xFF9BD14B.toInt(), 0xFF86BE3A.toInt(), 0xFF4F7A1C.toInt()), floatArrayOf(0f, 0.18f, 0.8f, 1f), Shader.TileMode.CLAMP)
+        r.set(-L / 2, -D / 2, L / 2, D / 2); c.drawRoundRect(r, 2.2f, 2.2f, p); p.shader = null
+        // the white label across most of its face, with its printing
+        fill(0xFFF4F5F1.toInt()); r.set(-L / 2 + 6.5f, -D / 2 + 2f, L / 2 - 5.5f, D / 2 - 2f); c.drawRoundRect(r, 0.6f, 0.6f, p)
+        s.strokeWidth = 0.18f; s.color = 0x22000000; c.drawRoundRect(r, 0.6f, 0.6f, s)
+        print(c, "+", -L / 2 + 9f, 1.4f, 4.4f, 0xFF1E1E1E.toInt(), true, Paint.Align.CENTER, 0f)
+        print(c, "Ni-MH", -L / 2 + 17.5f, -0.6f, 2.6f, 0xFF1E1E1E.toInt(), true, Paint.Align.CENTER, 0.2f)
+        print(c, "1.2V  1400mAh", -L / 2 + 17.5f, 2.6f, 2f, 0xFF1E1E1E.toInt(), false, Paint.Align.CENTER, 0.1f)
+        fill(0x55000000)
+        for (i in 0 until 4) c.drawRect(-2f, -3.6f + i * 1.6f, 14f - (i % 2) * 3f, -3.2f + i * 1.6f, p)
+        fill(0xFF1E1E1E.toInt()); c.drawRect(L / 2 - 8.5f, -2.4f, L / 2 - 8f, 2.4f, p)   // the "−" bar, as printed on the real thing
+        // the metal contacts at each end
+        p.shader = LinearGradient(0f, -3f, 0f, 3f, intArrayOf(0xFFF4F5F6.toInt(), 0xFF8D949B.toInt(), 0xFF4D5258.toInt()), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
+        r.set(-L / 2 - 0.2f, -D * 0.26f, -L / 2 + 0.9f, D * 0.26f); c.drawRoundRect(r, 0.3f, 0.3f, p)
+        r.set(L / 2 - 0.9f, -D * 0.2f, L / 2 + 0.2f, D * 0.2f); c.drawRoundRect(r, 0.3f, 0.3f, p); p.shader = null
         c.restore()
         c.restore()
         s.strokeWidth = dp(1.4f)

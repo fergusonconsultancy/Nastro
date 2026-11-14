@@ -189,10 +189,12 @@ class StageView(ctx: Context) : View(ctx) {
      * folded and open.
      */
     private fun matched(here: String?, other: String, geom: (Float) -> PlayerGeom): Float {
-        val free = geom(pxPerMm * 20f).k / pxPerMm
+        // 14 Nov 2026: in pixels. The Fold 8 Ultra's two screens share one density (422 ppi), so equal
+        // pixels are equal millimetres; the main screen's reported dpi can't be trusted to agree
+        val free = geom(pxPerMm * 20f).k
         if (here != null) Prefs.setFit(here, free)
         val o = Prefs.fit(other)
-        return pxPerMm * (if (o > 0f) min(free, o) else free)
+        return if (o > 0f) min(free, o) else free
     }
 
     private fun layoutAll() {
@@ -220,6 +222,7 @@ class StageView(ctx: Context) : View(ctx) {
             val m = matched("main", "cover") { PlayerGeom.bay(half + g, T + g, bw, H - g * 2, bleed, it) }
             deck = PlayerGeom.bay(half + g, T + g, bw, H - g * 2, bleed, m)
             face = PlayerGeom.face(half + g, T + g, bw, H - g * 2, bleed, m)
+            deck?.let { Prefs.setAnchor(it.tx - half, it.ty) }
             shelfBg.set(0f, 0f, half, Hf)
             shelfArea.set(L + dp(12f), T + dp(6f), half - dp(12f), T + H - dp(6f))
         } else {
@@ -228,7 +231,7 @@ class StageView(ctx: Context) : View(ctx) {
             val g = dp(8f)
             val bleed = RectF(off, 0f, Wf + off, Hf)
             val m = matched(if (H > W) "cover" else null, "main") { PlayerGeom.face(L + g + off, T + g, W - g * 2, H - g * 2, bleed, it) }
-            deck = PlayerGeom.face(L + g + off, T + g, W - g * 2, H - g * 2, bleed, m)
+            deck = PlayerGeom.face(L + g + off, T + g, W - g * 2, H - g * 2, bleed, m, if (H > W) Prefs.anchor() else null)
             val so = (1 - v) * Wf * 1.04f
             shelfBg.set(-so, 0f, Wf - so, Hf)
             shelfArea.set(L + dp(10f) - so, T + dp(6f), L + W - dp(10f) - so, T + H - dp(6f))

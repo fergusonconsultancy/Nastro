@@ -40,10 +40,23 @@ object Prefs {
      * layout (14 Nov 2026). The two screens share the smaller, so the tape behind the cover's lens
      * and the tape in the open compartment are the same physical size, as one tape would be.
      */
-    fun fit(screen: String): Float = if (::sp.isInitialized) sp.getFloat("fit_$screen", 0f) else 0f
+    fun fit(screen: String): Float = if (::sp.isInitialized) sp.getFloat("fitpx_$screen", 0f) else 0f
     fun setFit(screen: String, v: Float) {
-        if (!::sp.isInitialized || kotlin.math.abs(fit(screen) - v) < 0.004f) return
-        sp.edit().putFloat("fit_$screen", v).apply()
+        if (!::sp.isInitialized || kotlin.math.abs(fit(screen) - v) < 0.01f) return
+        sp.edit().putFloat("fitpx_$screen", v).apply()
+    }
+
+    /**
+     * Where the tape sits in the open compartment, in pixels from the crease and from the top (14 Nov
+     * 2026): folded, the door lies over the compartment, so the tape behind the cover's lens sits on
+     * the same spot.
+     */
+    fun anchor(): Pair<Float, Float>? = if (::sp.isInitialized && sp.contains("anchorX")) sp.getFloat("anchorX", 0f) to sp.getFloat("anchorY", 0f) else null
+    fun setAnchor(x: Float, y: Float) {
+        if (!::sp.isInitialized) return
+        val a = anchor()
+        if (a != null && kotlin.math.abs(a.first - x) < 1f && kotlin.math.abs(a.second - y) < 1f) return
+        sp.edit().putFloat("anchorX", x).putFloat("anchorY", y).apply()
     }
 
     /** artist, album or newest */
